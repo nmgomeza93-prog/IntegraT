@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "additionalDirectories": ["C:\\APP-Emprende\\Emprende"],
+    "deny": [
+      "Edit(//c/APP-Emprende/**)",
+      "Write(//c/APP-Emprende/**)"
+    ]
+  }
+}

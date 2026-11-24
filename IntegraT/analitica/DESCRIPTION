@@ -1,0 +1,13 @@
+Package: integrat.analitica
+Title: Analitica Financiera de IntegraT
+Version: 0.0.1
+Authors@R: person("IntegraT", role = c("aut", "cre"))
+Description: Punto de equilibrio, proyecciones, informe del mes y consejos del
+    asesor financiero de IntegraT. Recibe datasets desde la API; no accede a la
+    base de datos.
+License: file LICENSE
+Encoding: UTF-8
+Language: es
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3

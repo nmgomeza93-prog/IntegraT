@@ -1,0 +1,50 @@
+# --- Secretos (NUNCA versionar) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+config.yml
+erp_deploy.env
+.Renviron
+.claude/settings.local.json
+
+# --- R / RStudio / renv ---
+.Rproj.user/
+.Rhistory
+.RData
+.RDataTmp*
+.Ruserdata
+renv/library/
+renv/local/
+renv/cellar/
+renv/lock/
+renv/python/
+renv/sandbox/
+renv/staging/
+rsconnect/
+
+# --- Python ---
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# --- Datos locales, pruebas de IA y logs ---
+*.log
+logs/
+datos_locales/
+evaluacion_ia/facturas/
+*.dump
+*.sql.gz
+
+# --- SO / editores ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
