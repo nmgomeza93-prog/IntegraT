@@ -23,6 +23,7 @@ from integrat.db.tablas import (
     core_titular,
 )
 from integrat.db.tipos import ahora_utc, uuid7
+from integrat.items.servicio import sembrar_catalogo
 from integrat.negocios.esquemas import NegocioIn, NegocioOut, PrimerPaso
 
 PAIS_INICIAL = "GT"  # Guatemala; el país será configurable cuando haya más
@@ -141,6 +142,7 @@ def crear_negocio(con: Connection, usuario_id: uuid.UUID, datos: NegocioIn) -> a
         con.execute(ais.insertar(ctx, core_negocio_capacidad, {
             "id": uuid7(), "capacidad": c.capacidad, "activa": c.activa_por_defecto,
         }))
+    sembrar_catalogo(con, ctx, tipo)  # categorías de ejemplo del tipo de negocio
     return ctx
 
 

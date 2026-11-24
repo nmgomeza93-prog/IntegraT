@@ -1,0 +1,82 @@
+"""Formas de entrada y salida de /v1/items y /v1/categorias.
+
+El dinero viaja como texto decimal con 2 decimales ("45.00"), nunca como float.
+"""
+
+import uuid
+from decimal import Decimal
+from typing import Annotated
+
+from pydantic import BaseModel, Field, StringConstraints, field_serializer
+
+NombreItem = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=120)]
+NombreCategoria = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=2, max_length=80)
+]
+Descripcion = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)]
+Precio = Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=2)]
+Icono = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
+
+
+# ------------------------------------------------------------------ categorías
+
+class CategoriaIn(BaseModel):
+    nombre: NombreCategoria
+    icono: Icono | None = None
+
+
+class CategoriaCambios(BaseModel):
+    version: int = Field(ge=1, description="La versión que viste; evita pisar cambios ajenos.")
+    nombre: NombreCategoria | None = None
+    icono: Icono | None = None
+
+
+class CategoriaOut(BaseModel):
+    id: uuid.UUID
+    nombre: str
+    orden: int
+    icono: str | None
+    cantidad_items: int
+    version: int
+
+
+# ------------------------------------------------------------------ ítems
+
+class ItemIn(BaseModel):
+    nombre: NombreItem
+    precio_venta: Precio
+    categoria_id: uuid.UUID | None = None
+    descripcion: Descripcion | None = None
+
+
+class ItemCambios(BaseModel):
+    """Solo se cambia lo que se envía. `categoria_id: null` lo deja sin categoría."""
+
+    version: int = Field(ge=1, description="La versión que viste; evita pisar cambios ajenos.")
+    nombre: NombreItem | None = None
+    precio_venta: Precio | None = None
+    categoria_id: uuid.UUID | None = None
+    descripcion: Descripcion | None = None
+
+
+class ItemOut(BaseModel):
+    id: uuid.UUID
+    tipo_item: str
+    nombre: str
+    descripcion: str | None
+    categoria_id: uuid.UUID | None
+    categoria_nombre: str | None
+    precio_venta: Decimal
+    se_vende: bool
+    archivado: bool
+    version: int
+    aviso: str | None = None  # ej. "Ya tienes un platillo con ese nombre."
+
+    @field_serializer("precio_venta")
+    def _precio_como_texto(self, valor: Decimal) -> str:
+        return f"{valor:.2f}"
+
+
+class ListaItemsOut(BaseModel):
+    total: int
+    items: list[ItemOut]

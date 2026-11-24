@@ -68,6 +68,22 @@
           - {clave: receta_estrella, texto: "Dinos qué lleva tu platillo estrella", icono: basket}
           - {clave: primera_venta,   texto: "Haz tu primera venta", icono: cart}
     - tipo_negocio_codigo: ventas_en_linea
+      tipo_plantilla: catalogo
+      version_plantilla: 1
+      contenido:
+        tipo_item: producto
+        categorias: []
+    - tipo_negocio_codigo: restaurante
+      tipo_plantilla: catalogo
+      version_plantilla: 1
+      contenido:
+        tipo_item: platillo
+        categorias:
+          - {nombre: Entradas,      icono: egg-fried}
+          - {nombre: Platos fuertes, icono: cup-hot}
+          - {nombre: Bebidas,       icono: cup-straw}
+          - {nombre: Postres,       icono: cake2}
+    - tipo_negocio_codigo: ventas_en_linea
       tipo_plantilla: categorias_gasto
       version_plantilla: 1
       contenido:

@@ -332,6 +332,54 @@ core_idempotencia = sa.Table(
     **OPCIONES_TABLA,
 )
 
+# ---------------------------------------------------------------- ops_ (operación diaria)
+
+ops_categoria = sa.Table(
+    "ops_categoria", metadata,
+    col_id(),
+    _fk("negocio_id", UUIDBinario(), "core_negocio.id"),
+    sa.Column("nombre", sa.String(80), nullable=False),
+    sa.Column("orden", sa.SmallInteger(), nullable=False, server_default=sa.text("0")),
+    sa.Column("icono", sa.String(40), nullable=True),
+    *cols_auditoria(),
+    sa.Index(None, "negocio_id"),
+    comment="Categorías del catálogo de cada negocio",
+    **OPCIONES_TABLA,
+)
+
+ops_item = sa.Table(
+    "ops_item", metadata,
+    col_id(),
+    _fk("negocio_id", UUIDBinario(), "core_negocio.id"),
+    _fk("categoria_id", UUIDBinario(), "ops_categoria.id", nullable=True),
+    sa.Column("tipo_item", sa.String(20), nullable=False,
+              comment="producto o platillo (lo define el tipo de negocio)"),
+    sa.Column("nombre", sa.String(120), nullable=False),
+    sa.Column("descripcion", sa.String(500), nullable=True),
+    sa.Column("se_vende", Booleano, nullable=False, server_default=sa.text("1")),
+    *cols_auditoria(),
+    sa.CheckConstraint("tipo_item IN ('producto','platillo')", name="tipo_item"),
+    sa.Index(None, "negocio_id"),
+    sa.Index(None, "categoria_id"),
+    comment="Productos y platillos que vende el negocio",
+    **OPCIONES_TABLA,
+)
+
+ops_item_variante = sa.Table(
+    "ops_item_variante", metadata,
+    col_id(),
+    _fk("negocio_id", UUIDBinario(), "core_negocio.id"),
+    _fk("item_id", UUIDBinario(), "ops_item.id"),
+    sa.Column("nombre", sa.String(80), nullable=False, server_default="Única"),
+    sa.Column("precio_venta", sa.Numeric(14, 2), nullable=False),
+    *cols_auditoria(),
+    sa.CheckConstraint("precio_venta >= 0", name="precio_venta"),
+    sa.Index(None, "negocio_id"),
+    sa.Index(None, "item_id"),
+    comment="Presentaciones de un ítem; la implícita 'Única' guarda el precio",
+    **OPCIONES_TABLA,
+)
+
 PREFIJOS_PERMITIDOS = (
     "cat_", "core_", "fiscal_", "ops_", "cont_", "ia_", "integ_", "dw_", "rpt_", "audit_",
 )
