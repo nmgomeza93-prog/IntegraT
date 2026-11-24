@@ -4,7 +4,7 @@ import logging
 from typing import Annotated
 
 import sqlalchemy as sa
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.engine import Engine
 
 from integrat.auth import servicio
@@ -86,7 +86,17 @@ def refrescar(datos: RefrescarIn, engine: Motor) -> SesionOut:
     return _a_salida(sesion)
 
 
-@router.get("/yo", response_model=YoOut, summary="Quién soy y a qué negocios tengo acceso")
+@router.post("/auth/salir", status_code=status.HTTP_204_NO_CONTENT,
+             summary="Cerrar sesión (revoca el token de refresco)")
+def salir(datos: RefrescarIn, engine: Motor) -> Response:
+    # No exige token de acceso (puede estar vencido): el token de refresco es la credencial.
+    # Responde 204 exista o no el token, para no revelar cuáles existen.
+    with engine.begin() as con:
+        servicio.cerrar_sesion(con, datos.refresh_token)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/yo",response_model=YoOut, summary="Quién soy y a qué negocios tengo acceso")
 def yo(usuario: Annotated[UsuarioActual, Depends(usuario_actual)], engine: Motor) -> YoOut:
     with engine.connect() as con:
         filas = con.execute(

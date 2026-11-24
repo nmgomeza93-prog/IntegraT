@@ -101,6 +101,27 @@ def test_refresco_rota_el_token_y_detecta_reutilizacion(cliente_api):
     assert cliente_api.post("/v1/auth/refrescar", json={"refresh_token": nuevo}).status_code == 401
 
 
+def test_salir_revoca_el_token_de_refresco(cliente_api):
+    sesion = registrar_usuario(cliente_api)
+    refresco = sesion["refresh_token"]
+
+    assert cliente_api.post("/v1/auth/salir", json={"refresh_token": refresco}).status_code == 204
+    # Ya no sirve para renovar la sesión
+    r = cliente_api.post("/v1/auth/refrescar", json={"refresh_token": refresco})
+    assert r.status_code == 401
+    # Salir otra vez, o con un token desconocido, también responde 204 (no revela nada)
+    assert cliente_api.post("/v1/auth/salir", json={"refresh_token": refresco}).status_code == 204
+    assert cliente_api.post("/v1/auth/salir", json={"refresh_token": "x" * 40}).status_code == 204
+
+
+def test_salir_no_afecta_las_sesiones_de_otras_personas(cliente_api):
+    mari = registrar_usuario(cliente_api, "Mari")
+    ana = registrar_usuario(cliente_api, "Ana")
+    cliente_api.post("/v1/auth/salir", json={"refresh_token": mari["refresh_token"]})
+    r = cliente_api.post("/v1/auth/refrescar", json={"refresh_token": ana["refresh_token"]})
+    assert r.status_code == 200
+
+
 def test_refresco_con_token_desconocido_da_401(cliente_api):
     r = cliente_api.post("/v1/auth/refrescar", json={"refresh_token": "x" * 40})
     assert r.status_code == 401

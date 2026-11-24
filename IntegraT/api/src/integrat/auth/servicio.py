@@ -91,6 +91,16 @@ def iniciar_sesion(con: Connection, *, correo: str, clave: str) -> Sesion | None
     return emitir_sesion(con, fila.id, fila.nombre, correo)
 
 
+def cerrar_sesion(con: Connection, token_plano: str) -> None:
+    """Revoca el token de refresco recibido. Es idempotente: si no existe o ya estaba
+    revocado no hace nada (así no se revela qué tokens existen)."""
+    hash_ = seguridad.hash_token_refresco(token_plano)
+    con.execute(sa.update(core_token_refresco)
+                .where(core_token_refresco.c.token_hash == hash_,
+                       core_token_refresco.c.revocado_en.is_(None))
+                .values(revocado_en=ahora_utc()))
+
+
 def refrescar(con: Connection, token_plano: str) -> Sesion | None:
     """Rota el token de refresco.
 
