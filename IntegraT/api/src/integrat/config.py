@@ -85,6 +85,9 @@ class ConfigApp(BaseSettings):
 
     app_env: Literal["dev", "piloto", "prod"] = "dev"
     api_allowed_origins: str = ""  # lista separada por comas
+    api_jwt_secret: SecretStr | None = None  # obligatorio para emitir tokens (>= 32 caracteres)
+    api_jwt_acceso_minutos: int = 15
+    api_jwt_refresco_dias: int = 30
 
     @property
     def origenes_permitidos(self) -> list[str]:

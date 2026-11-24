@@ -288,6 +288,21 @@ core_negocio_capacidad = sa.Table(
     **OPCIONES_TABLA,
 )
 
+core_token_refresco = sa.Table(
+    "core_token_refresco", metadata,
+    col_id(),
+    _fk("usuario_id", UUIDBinario(), "core_usuario.id"),
+    sa.Column("token_hash", sa.CHAR(64), nullable=False,
+              comment="SHA-256 del token; nunca el token"),
+    sa.Column("expira_en", FechaHora, nullable=False),
+    sa.Column("revocado_en", FechaHora, nullable=True),
+    *cols_auditoria(),
+    sa.UniqueConstraint("token_hash"),
+    sa.Index(None, "usuario_id"),
+    comment="Tokens de refresco de sesión (rotan en cada uso)",
+    **OPCIONES_TABLA,
+)
+
 PREFIJOS_PERMITIDOS = (
     "cat_", "core_", "fiscal_", "ops_", "cont_", "ia_", "integ_", "dw_", "rpt_", "audit_",
 )

@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine
 
 import integrat
 from integrat.config import config_app
-from integrat.db.conexion import engine_principal
+from integrat.dependencias import obtener_engine
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["salud"])
@@ -28,11 +28,6 @@ class EstadoSalud(BaseModel):
     version: str
     entorno: str
     bd: EstadoBD
-
-
-def obtener_engine() -> Engine:
-    """Dependencia sobreescribible en pruebas."""
-    return engine_principal()
 
 
 def _revisar_bd(engine: Engine) -> EstadoBD:

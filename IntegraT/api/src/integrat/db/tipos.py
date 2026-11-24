@@ -6,6 +6,7 @@ Se usan tanto en las migraciones como en la metadata de ejecución (`tablas.py`)
 import secrets
 import time
 import uuid
+from datetime import UTC, datetime
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import mysql
@@ -36,6 +37,11 @@ class UUIDBinario(TypeDecorator):
 
     def process_result_value(self, value, dialect):
         return None if value is None else uuid.UUID(bytes=bytes(value))
+
+
+def ahora_utc() -> datetime:
+    """Hora actual en UTC sin zona (como se guarda en DATETIME(6))."""
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 AHORA = sa.text("CURRENT_TIMESTAMP(6)")
