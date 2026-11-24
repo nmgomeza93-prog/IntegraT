@@ -34,5 +34,5 @@
 |---|---|---|
 | R-01 | **shinyapps.io habla solo con la API (HTTPS) y no con PostgreSQL** | Así la BD no se expone a internet y la app Shiny no necesita credenciales de BD dentro del bundle. La conexión directa queda documentada como alternativa (`CONFIGURACION_SERVIDOR.md` §5) |
 | R-02 | **Cobrar la IA con un saldo prepagado en quetzales** ("Saldo IA") + lecturas incluidas en el plan | Es fácil de entender, no genera deudas y el saldo funciona como tope natural (`PROPUESTA_ARQUITECTURA.md` §5.7) |
-| R-03 | **Obtener un nombre de host (DNS) para la API**, aunque sea gratuito | shinyapps.io debe llamar a la API por HTTPS con un certificado válido (`CONFIGURACION_SERVIDOR.md` §4) |
+| R-03 | ✅ **Resuelta por D-21:** la API en Railway usa el dominio HTTPS que Railway genera (antes: obtener un nombre de host para la API) | shinyapps.io debe llamar a la API por HTTPS con un certificado válido (`CONFIGURACION_SERVIDOR.md` §4) |
 | R-04 | **Política contable por defecto para el costo de la IA:** prorratearlo como un flete (lo que pediste), configurable a "gasto" si el contador lo indica | Bajo NIIF para las PYMES podría considerarse un gasto administrativo (`REVISION_CONTADOR.md` §7) |

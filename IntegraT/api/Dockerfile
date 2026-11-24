@@ -26,5 +26,8 @@ RUN uv sync --frozen --no-dev
 RUN useradd --create-home --uid 10001 integrat && chown -R integrat /app
 USER integrat
 
+# Railway (y Azure) inyectan el puerto en $PORT; sin esa variable escucha en 8000.
+# --proxy-headers: la IP real del cliente viene en X-Forwarded-For (límite de intentos);
+# uvicorn solo la acepta de las IP listadas en FORWARDED_ALLOW_IPS (ver infra/railway.md).
 EXPOSE 8000
-CMD ["uv", "run", "--no-sync", "uvicorn", "integrat.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+CMD ["sh", "-c", "exec uv run --no-sync uvicorn integrat.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers"]

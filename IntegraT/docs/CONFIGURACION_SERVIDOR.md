@@ -1,5 +1,7 @@
 # Configuración del servidor y de los despliegues: IntegraT
 
+> **Piloto en Railway (D-21):** la API y la base **MySQL 9** (D-19) corren en Railway, con HTTPS que genera Railway; la app en shinyapps.io. Receta: `infra/railway.md`. Las secciones de este documento que mencionan PostgreSQL, Caddy, un servidor propio o un firewall por IP describen la alternativa de servidor propio / Azure y quedan pendientes de revisar.
+
 > **Fase 0 · Guía para el piloto.** shinyapps.io para la app Shiny; API, worker y PostgreSQL en tu servidor; migración posterior a Azure.
 > **Regla absoluta:** las credenciales viven **solo en `.env`**. Este documento usa marcadores como `<CONTRASEÑA_FUERTE>`; nunca escribas valores reales aquí.
 

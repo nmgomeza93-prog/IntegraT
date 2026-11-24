@@ -92,9 +92,10 @@ Antes de trabajar, lee `docs/DECISIONES.md` y el documento de `docs/` que corres
 
 ## Hospedaje (`docs/CONFIGURACION_SERVIDOR.md`)
 
-- Piloto: Shiny en **shinyapps.io**; API, worker y PostgreSQL en el servidor propio. Solo el puerto 443 (API) queda expuesto; PostgreSQL no se expone.
+- Piloto (D-21): Shiny en **shinyapps.io**; la API y MySQL en **Railway** (HTTPS que genera Railway). Receta: `infra/railway.md`.
+  La API en ejecución usa el usuario `integrat_api` (solo DML sobre `integrat`); las migraciones, `integrat_owner`. La API se endurece antes de abrirla (límite de intentos, `Idempotency-Key`, sin `/docs` fuera de `dev`).
 - Fotos públicas por `r2.dev` en el piloto (dominio propio en producción). La BD guarda llaves, no URLs.
-- Todo en contenedores y configurado por variables de entorno, listo para migrar a Azure (Container Apps + PostgreSQL Flexible Server + Key Vault).
+- Todo en contenedores y configurado por variables de entorno, listo para migrar a Azure (Container Apps + Azure Database for MySQL Flexible Server + Key Vault).
 
 ## Comandos
 
