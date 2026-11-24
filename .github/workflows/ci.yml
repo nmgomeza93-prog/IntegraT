@@ -1,0 +1,110 @@
+# CI de IntegraT: corre las pruebas en cada push a main y en cada pull request.
+# NO despliega nada y NO usa secretos: las credenciales de la base de pruebas de abajo son
+# ficticias y solo existen dentro del contenedor MySQL efímero del propio flujo.
+# El proyecto vive en la subcarpeta IntegraT/ de este repo (docs/PLAN_CIERRE_FASE1.md, paso 1).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Regla de seguridad: ningún archivo con credenciales dentro del repo.
+  higiene:
+    name: Sin secretos en el repo
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verificar que .env no está versionado
+        run: |
+          if git ls-files | grep -E '(^|/)\.env$'; then
+            echo "::error::Hay un archivo .env versionado. Quítalo del repo y rota sus credenciales."
+            exit 1
+          fi
+
+  api:
+    name: API (ruff + pytest)
+    runs-on: ubuntu-24.04
+    env:
+      # Base MySQL de PRUEBAS, efímera y local al runner (mismos nombres que en tu .env).
+      TEST_DB_HOST: 127.0.0.1
+      TEST_DB_PORT: "3307"
+      TEST_DB_NAME: integrat_test
+      TEST_DB_USER: integrat_test
+      TEST_DB_PASSWORD: ci-solo-pruebas-1
+      TEST_DB_ROOT_PASSWORD: ci-solo-pruebas-root-1
+    defaults:
+      run:
+        working-directory: IntegraT
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.13.9"   # misma versión que api/Dockerfile
+          enable-cache: true
+          cache-dependency-glob: IntegraT/api/uv.lock
+
+      - name: Levantar MySQL de pruebas (el mismo servicio que usas en local)
+        run: |
+          touch .env   # vacío: el servicio `api` del compose lo referencia, pero no se levanta aquí
+          docker compose -f infra/docker-compose.yml up -d --wait mysql-test
+
+      - name: Instalar dependencias
+        working-directory: IntegraT/api
+        run: uv sync --frozen
+
+      - name: Ruff
+        working-directory: IntegraT/api
+        run: uv run --no-sync ruff check .
+
+      - name: Pruebas
+        working-directory: IntegraT/api
+        run: uv run --no-sync pytest
+
+      - name: Registros de MySQL si algo falló
+        if: failure()
+        run: docker logs integrat-mysql-test --tail 50
+
+  app:
+    name: App y analítica (R, con navegador)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: IntegraT
+    env:
+      NOT_CRAN: "true"   # shinytest2 se salta las pruebas con navegador si no está definido
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "4.3.0"   # mantener igual a "R" -> "Version" en renv.lock
+          use-public-rspm: true
+
+      - name: Librerías del sistema que piden los paquetes de R
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libcurl4-openssl-dev libssl-dev libfontconfig1-dev libfreetype6-dev \
+            libharfbuzz-dev libfribidi-dev libpng-dev libjpeg-dev libxml2-dev
+
+      - uses: r-lib/actions/setup-renv@v2
+        with:
+          working-directory: IntegraT
+
+      - name: Pruebas de la app (incluye navegador a 390x844)
+        # --no-sandbox: Chrome no puede usar su sandbox en los runners; la VM es efímera.
+        run: |
+          Rscript -e "options(chromote.args = c('--no-sandbox')); testthat::test_dir('app/tests/testthat', stop_on_failure = TRUE)"
+
+      - name: Pruebas del paquete de analítica
+        run: Rscript -e "testthat::test_local('analitica', stop_on_failure = TRUE)"
