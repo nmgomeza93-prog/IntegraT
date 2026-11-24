@@ -1,6 +1,7 @@
 """Contraseñas (argon2id) y tokens (JWT de acceso + token de refresco opaco)."""
 
 import hashlib
+import hmac
 import secrets
 import uuid
 from dataclasses import dataclass
@@ -93,3 +94,10 @@ def nuevo_token_refresco() -> tuple[str, str]:
 
 def hash_token_refresco(plano: str) -> str:
     return hashlib.sha256(plano.encode()).hexdigest()
+
+
+def huella(valor: str) -> str:
+    """HMAC-SHA256 con el secreto de la API. Identifica un correo o una IP sin guardarlos
+    (una IP sola se podría recuperar por fuerza bruta; con el secreto, no)."""
+    return hmac.new(_secreto().encode(), b"huella|" + valor.strip().lower().encode(),
+                    hashlib.sha256).hexdigest()

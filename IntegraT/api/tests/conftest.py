@@ -4,6 +4,7 @@ Antes de correr las pruebas de base de datos:
     docker compose -f infra/docker-compose.yml --env-file .env up -d --wait mysql-test
 """
 
+import itertools
 import uuid
 
 import pytest
@@ -56,9 +57,25 @@ def cliente_api(bd_migrada, monkeypatch):
     monkeypatch.setenv("API_JWT_SECRET", SECRETO_JWT_PRUEBAS)
     config_app.cache_clear()
     app.dependency_overrides[obtener_engine] = lambda: bd_migrada
-    yield TestClient(app)
+    # Cada prueba llega desde su propia IP: los límites de intentos son reales (por IP y por
+    # correo) y no deben acumularse entre pruebas.
+    yield cliente_desde(ip_nueva())
     app.dependency_overrides.clear()
     config_app.cache_clear()
+
+
+_contador_ip = itertools.count(1)
+
+
+def ip_nueva() -> str:
+    n = next(_contador_ip)
+    return f"10.{(n >> 16) & 255}.{(n >> 8) & 255}.{n & 255}"
+
+
+def cliente_desde(ip: str) -> TestClient:
+    from integrat.main import app
+
+    return TestClient(app, client=(ip, 50000))
 
 
 def correo_unico(prefijo: str = "u") -> str:

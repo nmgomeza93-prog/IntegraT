@@ -303,6 +303,20 @@ core_token_refresco = sa.Table(
     **OPCIONES_TABLA,
 )
 
+core_intento_acceso = sa.Table(
+    "core_intento_acceso", metadata,
+    col_id(),
+    sa.Column("accion", sa.String(20), nullable=False, comment="login, registro, refrescar"),
+    sa.Column("clave_tipo", sa.String(10), nullable=False, comment="ip o correo"),
+    sa.Column("clave_hash", sa.CHAR(64), nullable=False, comment="HMAC-SHA256; nunca el valor"),
+    *cols_auditoria(),
+    sa.CheckConstraint("clave_tipo IN ('ip','correo')", name="clave_tipo"),
+    sa.Index(None, "accion", "clave_tipo", "clave_hash", "creado_en"),
+    sa.Index(None, "creado_en"),
+    comment="Intentos de acceso recientes para limitar la fuerza bruta",
+    **OPCIONES_TABLA,
+)
+
 PREFIJOS_PERMITIDOS = (
     "cat_", "core_", "fiscal_", "ops_", "cont_", "ia_", "integ_", "dw_", "rpt_", "audit_",
 )

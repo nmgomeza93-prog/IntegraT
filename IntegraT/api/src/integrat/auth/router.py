@@ -4,10 +4,10 @@ import logging
 from typing import Annotated
 
 import sqlalchemy as sa
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.engine import Engine
 
-from integrat.auth import servicio
+from integrat.auth import limitador, servicio
 from integrat.auth.dependencias import UsuarioActual, usuario_actual
 from integrat.auth.esquemas import (
     LoginIn,
@@ -41,10 +41,30 @@ def _sin_configuracion(e: ErrorConfiguracion) -> HTTPException:
                          "El servicio no está listo. Intenta más tarde.")
 
 
+def ip_cliente(request: Request) -> str:
+    """IP de quien llama. Detrás del proxy de Railway, uvicorn (--proxy-headers) la toma de
+    X-Forwarded-For si FORWARDED_ALLOW_IPS lo permite (docs/PLAN_CIERRE_FASE1.md, paso 4)."""
+    return request.client.host if request.client else "desconocida"
+
+
+def _demasiados(segundos: int) -> HTTPException:
+    return HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, limitador.MENSAJE,
+                         headers={"Retry-After": str(segundos)})
+
+
 @router.post("/auth/registro", response_model=SesionOut, status_code=status.HTTP_201_CREATED,
              summary="Crear una cuenta")
-def registro(datos: RegistroIn, engine: Motor) -> SesionOut:
+def registro(datos: RegistroIn, engine: Motor, request: Request) -> SesionOut:
+    ip = ip_cliente(request)
     try:
+        # El intento se anota ANTES y en su propia transacción: cuenta aunque el registro falle.
+        with engine.begin() as con:
+            espera = limitador.segundos_de_espera(con, "registro", ip=ip)
+            if espera is None:
+                limitador.registrar(con, "registro", ip=ip)
+        if espera is not None:
+            log.warning("Acceso: bloqueo de registro ip=%s", ip)
+            raise _demasiados(espera)
         with engine.begin() as con:
             sesion = servicio.registrar(
                 con, nombre=datos.nombre, correo=datos.correo, clave=datos.clave,
@@ -59,27 +79,51 @@ def registro(datos: RegistroIn, engine: Motor) -> SesionOut:
 
 
 @router.post("/auth/login", response_model=SesionOut, summary="Iniciar sesión")
-def login(datos: LoginIn, engine: Motor) -> SesionOut:
+def login(datos: LoginIn, engine: Motor, request: Request) -> SesionOut:
+    ip = ip_cliente(request)
+    sesion = None
     try:
+        # La transacción se confirma aunque el login falle: así se guarda el intento fallido.
         with engine.begin() as con:
-            sesion = servicio.iniciar_sesion(con, correo=datos.correo, clave=datos.clave)
+            espera = limitador.segundos_de_espera(con, "login", ip=ip, correo=datos.correo)
+            if espera is None:
+                sesion = servicio.iniciar_sesion(con, correo=datos.correo, clave=datos.clave)
+                if sesion is None:
+                    limitador.registrar(con, "login", ip=ip, correo=datos.correo)
+                else:
+                    limitador.olvidar_correo(con, "login", datos.correo)
     except ErrorConfiguracion as e:
         raise _sin_configuracion(e) from None
+    if espera is not None:
+        log.warning("Acceso: bloqueo de login ip=%s correo#%s", ip,
+                    limitador.correo_corto(datos.correo))
+        raise _demasiados(espera)
     if sesion is None:  # mismo mensaje exista o no el correo
+        log.warning("Acceso: login fallido ip=%s correo#%s", ip,
+                    limitador.correo_corto(datos.correo))
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Correo o contraseña incorrectos.")
     return _a_salida(sesion)
 
 
 @router.post("/auth/refrescar", response_model=SesionOut,
              summary="Renovar la sesión con el token de refresco")
-def refrescar(datos: RefrescarIn, engine: Motor) -> SesionOut:
+def refrescar(datos: RefrescarIn, engine: Motor, request: Request) -> SesionOut:
+    ip = ip_cliente(request)
+    sesion = None
     try:
         # La transacción se confirma aunque el resultado sea None: así persiste la revocación
-        # por reutilización de un token ya usado.
+        # por reutilización de un token ya usado y el intento fallido.
         with engine.begin() as con:
-            sesion = servicio.refrescar(con, datos.refresh_token)
+            espera = limitador.segundos_de_espera(con, "refrescar", ip=ip)
+            if espera is None:
+                sesion = servicio.refrescar(con, datos.refresh_token)
+                if sesion is None:
+                    limitador.registrar(con, "refrescar", ip=ip)
     except ErrorConfiguracion as e:
         raise _sin_configuracion(e) from None
+    if espera is not None:
+        log.warning("Acceso: bloqueo de refresco ip=%s", ip)
+        raise _demasiados(espera)
     if sesion is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED,
                             "Tu sesión venció. Inicia sesión otra vez.")
