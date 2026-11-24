@@ -12,6 +12,17 @@ from integrat.salud.router import obtener_engine
 CLAVE_INCORRECTA = "clave-incorrecta-de-prueba"
 
 
+@pytest.fixture(autouse=True)
+def entorno_dev(monkeypatch):
+    """Estas pruebas describen el comportamiento en dev, sin importar el APP_ENV del .env."""
+    from integrat.config import config_app
+
+    monkeypatch.setenv("APP_ENV", "dev")
+    config_app.cache_clear()
+    yield
+    config_app.cache_clear()
+
+
 @pytest.fixture
 def cliente():
     yield TestClient(app)
@@ -25,7 +36,7 @@ def test_salud_ok_con_base_migrada(cliente, bd_migrada):
     cuerpo = r.json()
     assert cuerpo["estado"] == "ok"
     assert cuerpo["bd"]["conectada"] is True
-    assert cuerpo["bd"]["migracion"] == "0003"
+    assert cuerpo["bd"]["migracion"] == "0005"
     assert cuerpo["bd"]["latencia_ms"] >= 0
 
 
@@ -44,7 +55,9 @@ def test_salud_sin_base_no_filtra_secretos(cliente, caplog):
         assert cfg.host not in texto
 
 
-def test_openapi_publicado(cliente):
-    r = cliente.get("/v1/openapi.json")
+def test_openapi_publicado_en_dev():
+    from integrat.main import crear_app
+
+    r = TestClient(crear_app()).get("/v1/openapi.json")
     assert r.status_code == 200
     assert "/v1/salud" in r.json()["paths"]

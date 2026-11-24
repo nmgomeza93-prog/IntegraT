@@ -47,9 +47,9 @@
 
 | Qué | Cómo | Por qué |
 |---|---|---|
-| **Límite de intentos** en `/auth/login`, `/auth/registro` y `/auth/refrescar` | Tabla `core_intento_acceso` (migración `0004`), conteo por IP y por correo en los últimos 15 min, respuesta `429` con mensaje amable | Sin esto, cualquiera puede probar contraseñas sin freno. Va en base de datos (no en memoria) para que funcione con varias réplicas y reinicios |
+| **Límite de intentos** en `/auth/login`, `/auth/registro` y `/auth/refrescar` | Tabla `core_intento_acceso` (migración `0004`; guarda solo huellas HMAC, nunca correos ni IPs). Login: 5 fallos por correo y 20 por IP en 15 min; registro: 10 intentos por IP por hora; refresco: 30 fallos por IP en 15 min. Respuesta `429` con `Retry-After` y mensaje amable | Sin esto, cualquiera puede probar contraseñas sin freno. Va en base de datos (no en memoria) para que funcione con varias réplicas y reinicios |
 | **IP real del cliente** detrás del proxy de Railway | `uvicorn --proxy-headers` con `--forwarded-allow-ips` limitado [verificar el valor en Railway] | Si no, todos los intentos parecen venir de la misma IP del proxy |
-| **`Idempotency-Key`** en `POST /v1/negocios` | Cabecera opcional; tabla `core_idempotencia` (migración `0004`, 24 h): misma clave y mismo usuario devuelve el mismo negocio. La app manda un UUID por onboarding | Regla de `CLAUDE.md`. Hoy un doble toque en la API crearía dos negocios |
+| **`Idempotency-Key`** en `POST /v1/negocios` | Cabecera opcional; tabla `core_idempotencia` (migración `0005`, 24 h): misma clave y mismo usuario devuelve el mismo negocio; la misma clave con otros datos da 422. La app manda una clave derivada de los datos elegidos | Regla de `CLAUDE.md`. Hoy un doble toque en la API crearía dos negocios |
 | **Menos información pública** | `/docs` y `/v1/openapi.json` desactivados cuando `APP_ENV` sea `piloto` o `prod`; `/v1/salud` sin `migracion` ni `entorno` para quien no esté en `dev` | No regalar el mapa de la API ni la versión de la base |
 | **Tamaño máximo de petición** y `API_ALLOWED_ORIGINS` vacío | Límite de cuerpo en el middleware. No hace falta CORS: quien llama a la API es el **servidor** de Shiny, no el navegador | Reduce superficie |
 | **Registros de seguridad** | Log de intentos fallidos y de bloqueos, sin correos completos ni contraseñas (el filtro de `logs.py` ya enmascara secretos) | Poder investigar un ataque |
@@ -82,10 +82,10 @@
    ```
    Y otro para migraciones (`integrat_owner`, con `CREATE/ALTER/DROP/INDEX/REFERENCES` solo sobre `integrat.*`). La API en ejecución **no** puede alterar tablas ni ver otras bases. Se confirma con una prueba: conectar con `integrat_api` e intentar `SHOW DATABASES` o leer otra base → debe fallar.
 3. **TLS hacia la base:** `DB_SSLMODE=required` como mínimo; `verify_identity` con el certificado de Railway si se puede [verificar].
-4. **Migrar la base real:** `alembic upgrade head` (aplica `0003` y `0004`) y `python -m integrat.db.semillas`.
+4. **Migrar la base real:** `alembic upgrade head` (aplica `0003`, `0004` y `0005`) y `python -m integrat.db.semillas`.
 5. **Respaldos:** confirmar si el plan de Railway incluye copias automáticas [verificar]. Si no, un `mysqldump` cifrado a un bucket R2 de respaldos, y **una restauración probada** en la base local antes de empezar el piloto.
 
-**Cómo lo pruebas:** `/v1/salud` desde tu PC con `DB_USER=integrat_api` muestra la migración `0004`; la prueba de "ver otras bases" falla como se espera; la restauración del respaldo funciona.
+**Cómo lo pruebas:** `/v1/salud` desde tu PC con `DB_USER=integrat_api` muestra la migración `0005` (con `APP_ENV=dev`; en piloto `/v1/salud` ya no la revela); la prueba de "ver otras bases" falla como se espera; la restauración del respaldo funciona.
 
 **Commit:** `docs: usuarios de base de datos y respaldos del piloto` (solo documentación y el script de respaldo; ninguna credencial).
 

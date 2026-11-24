@@ -86,6 +86,7 @@ class ConfigApp(BaseSettings):
     app_env: Literal["dev", "piloto", "prod"] = "dev"
     api_allowed_origins: str = ""  # lista separada por comas
     api_jwt_secret: SecretStr | None = None  # obligatorio para emitir tokens (>= 32 caracteres)
+    api_max_cuerpo_kb: int = 64  # las fotos van directo a R2; la API solo recibe JSON pequeño
     api_jwt_acceso_minutos: int = 15
     api_jwt_refresco_dias: int = 30
 

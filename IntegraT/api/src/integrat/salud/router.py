@@ -26,7 +26,7 @@ class EstadoBD(BaseModel):
 class EstadoSalud(BaseModel):
     estado: Literal["ok", "degradado"]
     version: str
-    entorno: str
+    entorno: str | None  # solo en dev
     bd: EstadoBD
 
 
@@ -54,9 +54,13 @@ def salud(response: Response, engine: Annotated[Engine, Depends(obtener_engine)]
     bd = _revisar_bd(engine)
     if not bd.conectada:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    entorno = config_app().app_env
+    if entorno != "dev":
+        # Fuera de desarrollo la ruta es pública: no se revela el entorno ni la migración.
+        bd = bd.model_copy(update={"migracion": None})
     return EstadoSalud(
         estado="ok" if bd.conectada else "degradado",
         version=integrat.__version__,
-        entorno=config_app().app_env,
+        entorno=entorno if entorno == "dev" else None,
         bd=bd,
     )
