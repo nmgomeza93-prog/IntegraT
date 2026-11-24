@@ -13,7 +13,7 @@
 | D-06 | **El costo de la IA se reparte a los productos de la factura** | Se prorratea como un flete y entra al precio sugerido. El tratamiento contable debe validarlo el contador | `PROPUESTA_ARQUITECTURA.md` §5.6, `REVISION_CONTADOR.md` §7 |
 | D-07 | **Prueba de modelos antes de elegir** | Unas 30 facturas reales; se comparan Opus 5.5, Sonnet 5.5 y Haiku 5.5 por precisión por campo, costo y tiempo | `PRUEBA_MODELOS_IA.md` |
 | D-08 | **Fotos de facturas en un bucket R2 privado** | Se declara en la política de privacidad | `PROPUESTA_ARQUITECTURA.md` §4 y §10 |
-| D-09 | **Hospedaje del piloto** | Shiny en **shinyapps.io**; API, worker y PostgreSQL en el **servidor propio**. Base **nueva** `integrat`. Todo preparado para migrar a **Azure** (contenedores y variables de entorno) | `CONFIGURACION_SERVIDOR.md` |
+| D-09 | **Hospedaje del piloto** | Shiny en **shinyapps.io**; API, worker y base de datos en el **servidor propio** *(reemplazado por D-19 y D-21: MySQL y API en Railway)*. Base **nueva** `integrat`. Todo preparado para migrar a **Azure** (contenedores y variables de entorno) | `CONFIGURACION_SERVIDOR.md` |
 | D-10 | **Credenciales solo en `.env`** | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` y las demás. Nunca en código, documentos ni logs. Se versiona `.env.example` sin valores | `CONFIGURACION_SERVIDOR.md` §2 |
 | D-11 | **Fotos públicas por `r2.dev` en el piloto** | Se migra a dominio propio para producción (plan documentado) | `PROPUESTA_ARQUITECTURA.md` §4.3 |
 | D-12 | **Contabilidad y fiscal de Guatemala a validar** | Toda decisión contable y fiscal pasa por un contador | `REVISION_CONTADOR.md` |
@@ -32,7 +32,7 @@
 
 | # | Recomendación | Por qué |
 |---|---|---|
-| R-01 | **shinyapps.io habla solo con la API (HTTPS) y no con PostgreSQL** | Así la BD no se expone a internet y la app Shiny no necesita credenciales de BD dentro del bundle. La conexión directa queda documentada como alternativa (`CONFIGURACION_SERVIDOR.md` §5) |
+| R-01 | **shinyapps.io habla solo con la API (HTTPS) y no con la base de datos** | Así la BD no se expone a internet y la app Shiny no necesita credenciales de BD dentro del bundle. La conexión directa queda documentada como alternativa (`CONFIGURACION_SERVIDOR.md` §5) |
 | R-02 | **Cobrar la IA con un saldo prepagado en quetzales** ("Saldo IA") + lecturas incluidas en el plan | Es fácil de entender, no genera deudas y el saldo funciona como tope natural (`PROPUESTA_ARQUITECTURA.md` §5.7) |
 | R-03 | ✅ **Resuelta por D-21:** la API en Railway usa el dominio HTTPS que Railway genera (antes: obtener un nombre de host para la API) | shinyapps.io debe llamar a la API por HTTPS con un certificado válido (`CONFIGURACION_SERVIDOR.md` §4) |
 | R-04 | **Política contable por defecto para el costo de la IA:** prorratearlo como un flete (lo que pediste), configurable a "gasto" si el contador lo indica | Bajo NIIF para las PYMES podría considerarse un gasto administrativo (`REVISION_CONTADOR.md` §7) |

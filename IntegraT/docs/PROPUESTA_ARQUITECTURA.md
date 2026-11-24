@@ -2,6 +2,7 @@
 
 > **Fase 0 · v2 (decisiones aprobadas)** · Fecha: 2026-11-23.
 > Contiene el stack, la frontera R/Python, Cloudflare R2, la carga de facturas (sin IA y con IA), el cobro de la IA, el motor contable, el roadmap y los riesgos.
+> ⚠️ **Actualización (D-19, D-21):** la base es **MySQL 9** y la API y la base del piloto corren en **Railway**, no en un servidor propio. Donde este documento diga PostgreSQL, RLS o servidor propio, manda `DECISIONES.md` (ver también `CONVENCIONES_BD.md` e `infra/railway.md`).
 > Las decisiones están registradas en `DECISIONES.md`. Los precios de terceros son referencias a la fecha indicada y hay que **re-verificarlos antes de comprometer presupuesto**.
 
 ---
@@ -13,10 +14,10 @@
 | Arquitectura | **Opción C, híbrida**: interfaz **Shiny para R** + **API FastAPI (Python)** + **worker Python** |
 | Dueño de los datos y de la lógica de negocio | **La API (Python).** Es el único componente con credenciales de BD y R2 |
 | Analítica, proyecciones, punto de equilibrio y reportes | **R** (paquete interno `integrat.analitica`), que se ejecuta dentro de la app Shiny |
-| Base de datos | **PostgreSQL**, base **nueva `integrat`** en el servidor propio. RLS **por negocio** y capa **titular (NIT)** para lo fiscal consolidado |
+| Base de datos | **MySQL 9** *(antes PostgreSQL; D-19)*, base **nueva `integrat`** en Railway. Aislamiento **por negocio** en la API (sin RLS) y capa **titular (NIT)** para lo fiscal consolidado |
 | Imágenes | **Cloudflare R2**: bucket **público** para catálogo (`r2.dev` en el piloto, dominio propio en producción) y bucket **privado** para facturas |
 | Facturas | **Dos modos**: sin IA (guiada a mano o con plantilla simple) y con IA (foto, opcional, con costo visible, límite mensual e historial) |
-| Hospedaje del piloto | Shiny en **shinyapps.io**; API, worker y PostgreSQL en el **servidor propio**. Todo en contenedores y configurado por variables de entorno, listo para migrar a **Azure** |
+| Hospedaje del piloto | Shiny en **shinyapps.io**; API, worker y base de datos en **Railway** *(D-21)*. Todo en contenedores y configurado por variables de entorno, listo para migrar a **Azure** |
 | Conexión | La app **siempre funciona en línea**. No hay modo sin conexión |
 | FEL | No se emite en el MVP, pero queda **preparada** (`PLAN_FEL.md`) |
 
@@ -79,9 +80,9 @@ flowchart LR
   WK -->|"solo si el usuario\nlo autoriza"| LLM
 ```
 
-**Recomendación R-01: shinyapps.io habla solo con la API.** PostgreSQL **no se expone a internet**; escucha solo en la red interna del servidor.
+**Recomendación R-01: shinyapps.io habla solo con la API.** La base de datos **no se expone a internet** más de lo necesario: la usa solo la API, con un usuario de mínimos privilegios.
 Así, (a) no hay credenciales de BD dentro del bundle de shinyapps.io (ese fue el error de la v1) y (b) solo hay una puerta de entrada, ya protegida por TLS, tokens y límites de tasa.
-La conexión directa de shinyapps.io a PostgreSQL queda documentada como alternativa en `CONFIGURACION_SERVIDOR.md` §5.
+La conexión directa de shinyapps.io a la base de datos queda documentada como alternativa en `CONFIGURACION_SERVIDOR.md` §5.
 
 ### 2.4 Límites de Shiny con "siempre en línea"
 
@@ -360,7 +361,7 @@ Ese costo alimenta el CPP y, por lo tanto, el precio sugerido.
 
 ## 6. Base de datos (resumen; el detalle está en `MODELO_DATOS.md`)
 
-- PostgreSQL, base **nueva `integrat`** en el servidor propio. **La base de la v1 (`erp_pyme_gt`) nunca se usa.**
+- MySQL 9, base **nueva `integrat`** en Railway. **La base de la v1 (`erp_pyme_gt`) nunca se usa.**
 - Esquemas: `core`, `cat`, `ops`, `cont`, `fiscal`, `ia`, `integ`, `dw`, `rpt` y `audit`.
 - **RLS por `negocio_id`**. La capa `core.titular` agrupa negocios con el mismo NIT para lo fiscal consolidado.
 - UUIDv7, columnas de auditoría, borrado lógico, versión optimista y migraciones con Alembic.

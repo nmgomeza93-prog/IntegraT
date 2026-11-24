@@ -12,7 +12,7 @@
 | Python 3.12 | API | ✅ 3.12.6 instalado |
 | `uv` | Entorno y dependencias de Python (`api/.venv`) | ❌ No instalado. Se instala en el paso 1 (`pip install uv` o el instalador oficial) |
 | R ≥ 4.3 + RStudio | App Shiny y analítica | R no está en el PATH de la terminal; hay que confirmar la ruta de instalación |
-| Docker Desktop (opcional, recomendado) | PostgreSQL local para pruebas aisladas | Por verificar |
+| Docker Desktop (opcional, recomendado) | MySQL local para pruebas aisladas | Por verificar |
 | Base `integrat` | Desarrollo | ⚠️ **Ver "Bloqueo" abajo** |
 
 > **Decidido (D-19): MySQL 9.7 en Railway.** En el paso 2 se adapta `MODELO_DATOS.md`:
@@ -96,7 +96,7 @@ api/src/integrat/logs.py            # logging estructurado; filtro que enmascara
 api/tests/test_salud.py
 api/tests/test_config_no_filtra_secretos.py
 api/Dockerfile
-infra/docker-compose.yml            # api (+ postgres local opcional para pruebas)
+infra/docker-compose.yml            # api (+ MySQL local para pruebas)
 ```
 
 `GET /v1/salud` devuelve, por ejemplo: `{"estado":"ok","version":"0.1.0","bd":{"conectada":true,"latencia_ms":42,"migracion":"0003"}}`, sin host, usuario ni contraseña.

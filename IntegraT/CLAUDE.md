@@ -33,7 +33,7 @@ Antes de trabajar, lee `docs/DECISIONES.md` y el documento de `docs/` que corres
    Pruebas automáticas verifican que un negocio no ve los datos de otro.
    El `negocio_id` sale **del token** del usuario, nunca de la configuración ni de parámetros del cliente (fue un bug grave de la v1).
 5. **Fotos de facturas solo en el bucket R2 privado**, con acceso mediante URLs prefirmadas de corta duración. El bucket público es solo para el catálogo.
-6. **La app Shiny no lleva secretos.** Solo necesita `API_BASE_URL`. No la conectes directamente a PostgreSQL.
+6. **La app Shiny no lleva secretos.** Solo necesita `API_BASE_URL`. No la conectes directamente a la base de datos.
 7. **IA para facturas: siempre opcional y bajo control del usuario.** Nunca llames al modelo sin que se cumplan estas condiciones:
    - La IA está activada para el negocio.
    - El usuario confirmó el precio mostrado.
@@ -60,7 +60,7 @@ Antes de trabajar, lee `docs/DECISIONES.md` y el documento de `docs/` que corres
 
 ## Base de datos (`docs/MODELO_DATOS.md`)
 
-- **MySQL 9.x, base `integrat`** (D-19). Partes de `MODELO_DATOS.md` asumían PostgreSQL y se adaptan en el paso 2 de la Fase 1.
+- **MySQL 9.x, base `integrat`** (D-19). `MODELO_DATOS.md` se escribió pensando en PostgreSQL: donde difiera, manda `CONVENCIONES_BD.md`.
   Los "esquemas" lógicos (`core`, `cat`, `ops`, `cont`, `fiscal`, `ia`, `integ`, `dw`, `rpt`, `audit`) se mantienen como **prefijo de tabla** dentro de la única base `integrat`.
 - Convenciones:
   - Español, snake_case, tablas en singular, PK `id uuid` (UUIDv7), FK `<tabla>_id`.

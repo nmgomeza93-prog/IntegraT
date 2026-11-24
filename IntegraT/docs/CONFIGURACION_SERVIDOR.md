@@ -2,7 +2,8 @@
 
 > **Piloto en Railway (D-21):** la API y la base **MySQL 9** (D-19) corren en Railway, con HTTPS que genera Railway; la app en shinyapps.io. Receta: `infra/railway.md`. Las secciones de este documento que mencionan PostgreSQL, Caddy, un servidor propio o un firewall por IP describen la alternativa de servidor propio / Azure y quedan pendientes de revisar.
 
-> **Fase 0 · Guía para el piloto.** shinyapps.io para la app Shiny; API, worker y PostgreSQL en tu servidor; migración posterior a Azure.
+> **Guía del piloto.** shinyapps.io para la app Shiny; API y MySQL en Railway; migración posterior a Azure.
+> Las secciones 3 a 6 describen la alternativa de **servidor propio con PostgreSQL**; no se usan en el piloto actual (se conservan como referencia).
 > **Regla absoluta:** las credenciales viven **solo en `.env`**. Este documento usa marcadores como `<CONTRASEÑA_FUERTE>`; nunca escribas valores reales aquí.
 
 ---
@@ -11,24 +12,27 @@
 
 ```mermaid
 flowchart LR
-  U["📱 Usuarios"] -->|HTTPS| SA["shinyapps.io\n(app Shiny R)"]
-  U -->|"PUT/GET fotos\n(URLs prefirmadas y r2.dev)"| R2["Cloudflare R2"]
-  SA -->|"HTTPS 443\n(solo IPs de shinyapps.io)"| FW["Firewall del servidor"]
-  subgraph SRV["Tu servidor"]
-    FW --> CADDY["Caddy (TLS)"] --> API["API FastAPI :8000\n(red interna)"]
-    WK["Worker"] 
-    PG[("PostgreSQL :5432\nsolo red interna\nbase: integrat")]
-    API --> PG
-    WK --> PG
+  U["📱 Usuarios"] -->|HTTPS| SA["shinyapps.io
+(app Shiny R)"]
+  U -->|"PUT/GET fotos
+(URLs prefirmadas y r2.dev)"| R2["Cloudflare R2"]
+  SA -->|"HTTPS
+(dominio de Railway)"| API
+  subgraph RW["Railway (proyecto de IntegraT)"]
+    API["API FastAPI
+($PORT)"]
+    DB[("MySQL 9
+base: integrat")]
+    API -->|"usuario integrat_api
+(solo DML)"| DB
   end
-  WK --> R2
   API --> R2
-  WK -->|opcional| AI["Claude API"]
 ```
 
-- **Lo único expuesto a internet es el puerto 443** (Caddy → API). En el piloto se puede restringir a las IPs de salida de shinyapps.io + tu IP de administración.
-- **PostgreSQL no se expone** (recomendación R-01).
+- **Lo único expuesto a internet es la API**, por HTTPS con el certificado de Railway. La API se endurece antes de abrirla (D-21): límite de intentos, `Idempotency-Key`, sin `/docs` fuera de `dev`, límite de tamaño.
+- **La base la usa solo la API**, con un usuario de mínimos privilegios (`integrat_api`); las migraciones usan `integrat_owner`.
 - Los usuarios nunca llaman a la API directamente: lo hace la app Shiny. Las fotos van del celular directo a R2.
+- Receta de despliegue: `infra/railway.md`.
 
 ---
 
@@ -42,11 +46,11 @@ flowchart LR
 | Variable | Quién la usa | Descripción |
 |---|---|---|
 | `APP_ENV` | todos | `dev`, `piloto` o `prod` |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | API, worker | Conexión a PostgreSQL. `DB_NAME=integrat` siempre. `DB_USER` = rol de ejecución (`integrat_api`) |
-| `DB_SSLMODE` | API, worker | `disable` si la BD está en la misma red interna de Docker; `verify-full` si está en otro host |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | API, worker | Conexión a MySQL. `DB_NAME=integrat` siempre. `DB_USER` = rol de ejecución (`integrat_api`) |
+| `DB_SSLMODE` | API, worker | `required` como mínimo en Railway; `verify_identity` (con `DB_SSL_CA`) si se dispone del certificado |
 | `DB_MIGRATIONS_USER`, `DB_MIGRATIONS_PASSWORD` | solo migraciones | Rol dueño del esquema (`integrat_owner`); no lo usa la API en ejecución |
 | `API_JWT_SECRET` | API | Firma de tokens (32 bytes aleatorios o más) |
-| `API_ALLOWED_ORIGINS` | API | Orígenes permitidos (URL de la app en shinyapps.io) |
+| `API_ALLOWED_ORIGINS` | API | Vacío en el piloto: quien llama a la API es el servidor de Shiny, no el navegador |
 | `R2_ACCOUNT_ID` | API, worker | ID de la cuenta de Cloudflare |
 | `R2_PUBLIC_BUCKET`, `R2_PUBLIC_ACCESS_KEY_ID`, `R2_PUBLIC_SECRET_ACCESS_KEY` | API, worker | Token con permiso solo sobre el bucket público |
 | `R2_PRIVATE_BUCKET`, `R2_PRIVATE_ACCESS_KEY_ID`, `R2_PRIVATE_SECRET_ACCESS_KEY` | API, worker | Token con permiso solo sobre el bucket privado |
@@ -56,12 +60,12 @@ flowchart LR
 | `API_BASE_URL` | **app Shiny** | URL HTTPS de la API. **Es la única configuración que necesita Shiny y no es secreta** |
 
 **shinyapps.io:** la app Shiny **no lleva secretos**.
-- `API_BASE_URL` se entrega en un `config.yml` dentro del bundle, que es seguro porque no es secreto. shinyapps.io define `R_CONFIG_ACTIVE=shinyapps`, según su documentación.
-- El script de despliegue verifica que **no** se incluya `.env` en el bundle.
+- `API_BASE_URL` se entrega en `app/config.yml` (sección `shinyapps`) dentro del bundle, que es seguro porque no es secreto. shinyapps.io define `R_CONFIG_ACTIVE=shinyapps`, según su documentación.
+- `infra/desplegar_app.R` verifica que **no** se incluya `.env` ni secretos en el bundle.
 
 ---
 
-## 3. Preparar el servidor
+## 3. (Alternativa: servidor propio) Preparar el servidor
 
 > Asume Linux (Ubuntu Server LTS o similar) con Docker. Si tu servidor es Windows, se recomienda una VM Linux o WSL2 para los contenedores.
 
@@ -86,7 +90,7 @@ flowchart LR
 
 ---
 
-## 4. HTTPS para la API sin dominio propio
+## 4. (Alternativa: servidor propio) HTTPS para la API sin dominio propio
 
 shinyapps.io debe llamar a la API por **HTTPS con un certificado válido**. Opciones:
 
@@ -108,7 +112,7 @@ api.<host> {
 
 ---
 
-## 5. PostgreSQL: base nueva `integrat`
+## 5. (Alternativa: servidor propio) PostgreSQL: base nueva `integrat`
 
 > **La base de la v1 (`erp_pyme_gt`, en MySQL) no se usa ni se toca.** Si tu servidor tiene MySQL por la v1, PostgreSQL se instala **aparte** (en el contenedor oficial `postgres`) sin modificar MySQL.
 
@@ -169,17 +173,17 @@ Todo se construye como **contenedores configurados solo por variables de entorno
 | Pieza | Piloto | Azure (propuesta) |
 |---|---|---|
 | App Shiny | shinyapps.io (bundle con rsconnect). **Además se mantiene un `Dockerfile`** (rocker) que se prueba en CI | **Azure Container Apps** con *session affinity* (Shiny necesita sesiones sticky y websockets) |
-| API | Docker en tu servidor | Azure Container Apps (escala por peticiones) |
-| Worker | Docker en tu servidor | Azure Container Apps (worker) o Container Apps Jobs |
-| PostgreSQL | Docker en tu servidor | **Azure Database for PostgreSQL – Flexible Server** (RLS, backups y alta disponibilidad administrados) |
+| API | Railway (contenedor) | Azure Container Apps (escala por peticiones) |
+| Worker | Railway (contenedor) | Azure Container Apps (worker) o Container Apps Jobs |
+| MySQL | Railway | **Azure Database for MySQL – Flexible Server** (backups y alta disponibilidad administrados) |
 | Secretos | `.env` | **Azure Key Vault** → variables de entorno de cada contenedor (mismos nombres) |
-| TLS y dominio | Caddy + Let's Encrypt | Certificados administrados de Container Apps o Front Door |
+| TLS y dominio | Dominio HTTPS que genera Railway | Certificados administrados de Container Apps o Front Door |
 | Imágenes | Cloudflare R2 | Se mantiene R2 (egreso gratis); la capa `almacenamiento` permitiría Azure Blob si se decide |
 | Logs | Archivos y stdout | Azure Monitor / Log Analytics (sin secretos en los logs) |
 
 **Pasos de migración:**
 1. Crear los recursos en Azure.
-2. Restaurar el último `pg_dump` en Flexible Server.
+2. Restaurar el último respaldo (`mysqldump`) en Flexible Server.
 3. Cargar los secretos en Key Vault.
 4. Desplegar las mismas imágenes.
 5. Cambiar `API_BASE_URL` (y DNS).
@@ -189,13 +193,12 @@ Todo se construye como **contenedores configurados solo por variables de entorno
 
 ## 8. Checklist antes del piloto
 
-- [ ] `.env` creado en el servidor a partir de `.env.example`, con permisos `600` y fuera de Git.
-- [ ] Firewall: solo 443 (shinyapps.io + administración) y 22 (administración).
-- [ ] Hostname y certificado HTTPS válidos para la API.
-- [ ] PostgreSQL sin exposición pública; base `integrat`; roles `integrat_owner` e `integrat_api` con contraseñas fuertes.
-- [ ] Prueba automática de aislamiento por RLS en verde.
-- [ ] Buckets R2 creados (`integrat-publico-piloto` con r2.dev **activado**, `integrat-privado-piloto` **sin** acceso público), CORS configurado y tokens de mínimo privilegio.
-- [ ] Backups diarios cifrados fuera del servidor + una restauración probada.
-- [ ] El bundle de shinyapps.io verificado: sin `.env` y sin secretos.
+- [ ] CI en verde en GitHub.
+- [ ] API en Railway con HTTPS válido (`infra/railway.md`); `/docs` da 404 y el sexto login fallido da 429.
+- [ ] La API corre con `integrat_api` y `DB_SSLMODE=required`; `integrat_owner` solo para migraciones.
+- [ ] `API_JWT_SECRET` nuevo, distinto del de desarrollo, cargado solo en el panel de Railway.
+- [ ] Base `integrat` migrada, con catálogos y **una restauración de respaldo probada**.
+- [ ] Prueba de aislamiento entre negocios en verde (CI) y verificada a mano con dos cuentas.
+- [ ] Bundle de shinyapps.io verificado con `infra/desplegar_app.R`: sin `.env` ni secretos.
+- [ ] Buckets R2 creados (`integrat-publico-piloto` con r2.dev **activado**, `integrat-privado-piloto` **sin** acceso público), CORS y tokens de mínimo privilegio (cuando lleguen las fotos, Fase 2).
 - [ ] Política de privacidad publicada (`PROPUESTA_ARQUITECTURA.md` §10).
-- [ ] Revisión del contador completada (`REVISION_CONTADOR.md`).
