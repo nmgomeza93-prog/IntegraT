@@ -1,0 +1,9 @@
+# Configuración de la app por entorno. NO es secreta: solo la dirección pública de la API.
+# shinyapps.io define R_CONFIG_ACTIVE=shinyapps, que activa la sección de abajo.
+# La variable de entorno API_BASE_URL, si existe, manda sobre este archivo (pruebas, PC local).
+default:
+  api_base_url: "http://127.0.0.1:8000"
+
+shinyapps:
+  # Reemplaza por la dirección HTTPS que genera Railway (infra/railway.md), sin "/" al final.
+  api_base_url: "https://<DIRECCION-DE-RAILWAY>"

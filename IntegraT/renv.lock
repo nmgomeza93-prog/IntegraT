@@ -38,6 +38,17 @@
       ],
       "Hash": "f481f89daa906a34eab8ef8658c8a89c"
     },
+    "RcppTOML": {
+      "Package": "RcppTOML",
+      "Version": "0.2.3",
+      "Source": "Repository",
+      "Repository": "RSPM",
+      "Requirements": [
+        "R",
+        "Rcpp"
+      ],
+      "Hash": "23eeca7d3c7d63fc7449108c0a66178c"
+    },
     "askpass": {
       "Package": "askpass",
       "Version": "1.2.1",
@@ -397,6 +408,17 @@
       ],
       "Hash": "f4d796ba71b073f7bc95da858caded00"
     },
+    "jose": {
+      "Package": "jose",
+      "Version": "3.0.0",
+      "Source": "Repository",
+      "Repository": "RSPM",
+      "Requirements": [
+        "jsonlite",
+        "openssl"
+      ],
+      "Hash": "eb5e2d64053112f0eead376c4256513b"
+    },
     "jquerylib": {
       "Package": "jquerylib",
       "Version": "0.1.4",
@@ -507,6 +529,18 @@
         "R"
       ],
       "Hash": "093789c0b2110ff8db3b7363c16b4158"
+    },
+    "packrat": {
+      "Package": "packrat",
+      "Version": "0.9.3",
+      "Source": "Repository",
+      "Repository": "RSPM",
+      "Requirements": [
+        "R",
+        "tools",
+        "utils"
+      ],
+      "Hash": "d3289899c84c65def1a783ea0a9ea0eb"
     },
     "pingr": {
       "Package": "pingr",
@@ -668,6 +702,38 @@
       ],
       "Hash": "b2453de2d29aa646afe4781defdc7903"
     },
+    "rsconnect": {
+      "Package": "rsconnect",
+      "Version": "1.12.0",
+      "Source": "Repository",
+      "Repository": "RSPM",
+      "Requirements": [
+        "R",
+        "cli",
+        "curl",
+        "digest",
+        "httr2",
+        "jsonlite",
+        "lifecycle",
+        "openssl",
+        "packrat",
+        "renv",
+        "rlang",
+        "rstudioapi",
+        "snowflakeauth",
+        "tools",
+        "utils",
+        "yaml"
+      ],
+      "Hash": "39e3f6a1f23149efd6deb1fd16aece21"
+    },
+    "rstudioapi": {
+      "Package": "rstudioapi",
+      "Version": "0.19.0",
+      "Source": "Repository",
+      "Repository": "RSPM",
+      "Hash": "db86914207e4e0f112b60ebbc3e1793c"
+    },
     "sass": {
       "Package": "sass",
       "Version": "0.5.0",
@@ -744,6 +810,22 @@
         "withr"
       ],
       "Hash": "5be8f1ad9ec5baeb8693f6e489563dfb"
+    },
+    "snowflakeauth": {
+      "Package": "snowflakeauth",
+      "Version": "0.3.1",
+      "Source": "Repository",
+      "Repository": "RSPM",
+      "Requirements": [
+        "RcppTOML",
+        "cli",
+        "curl",
+        "jose",
+        "jsonlite",
+        "openssl",
+        "rlang"
+      ],
+      "Hash": "11a7bc4ec72365805a4ba65030e48c62"
     },
     "sourcetools": {
       "Package": "sourcetools",

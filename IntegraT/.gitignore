@@ -5,6 +5,9 @@
 *.pem
 *.key
 config.yml
+# Excepción: la config de la app Shiny solo lleva la dirección pública de la API (sin secretos;
+# infra/desplegar_app.R revisa que no los tenga).
+!app/config.yml
 erp_deploy.env
 .Renviron
 .claude/settings.local.json

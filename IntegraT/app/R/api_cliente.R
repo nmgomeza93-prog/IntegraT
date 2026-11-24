@@ -1,10 +1,23 @@
 # Cliente de la API de IntegraT (httr2). La app Shiny NO se conecta a la base de datos:
 # todo pasa por la API (docs/PROPUESTA_ARQUITECTURA.md §3). Única configuración: API_BASE_URL.
 
+# Dirección de la API, en este orden: variable API_BASE_URL -> app/config.yml (sección activa
+# según R_CONFIG_ACTIVE; shinyapps.io usa "shinyapps") -> http://127.0.0.1:8000.
 api_base_url <- function() {
   url <- Sys.getenv("API_BASE_URL", unset = "")
+  if (!nzchar(url)) url <- url_desde_config()
   if (!nzchar(url)) url <- "http://127.0.0.1:8000"
   sub("/+$", "", url)
+}
+
+# Lee api_base_url de config.yml: valores de "default" y, encima, los de la sección activa.
+# Devuelve "" si no hay archivo o no tiene el valor (nunca lanza error).
+url_desde_config <- function(archivo = "config.yml",
+                             activo = Sys.getenv("R_CONFIG_ACTIVE", unset = "default")) {
+  if (!file.exists(archivo)) return("")
+  cfg <- tryCatch(yaml::read_yaml(archivo), error = function(e) NULL)
+  url <- cfg[[activo]]$api_base_url %||% cfg$default$api_base_url
+  if (is.character(url) && length(url) == 1L && !is.na(url)) url else ""
 }
 
 api_peticion <- function(ruta, tiempo_max = 5) {
