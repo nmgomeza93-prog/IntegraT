@@ -1,0 +1,54 @@
+/* Navegación inferior fija: 5 secciones, el ➕ central destacado. */
+
+.nav-inferior {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1030;
+  background: var(--color-superficie);
+  border-top: 1px solid var(--color-borde);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.nav-inferior__lista {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  max-width: var(--ancho-max-contenido);
+  margin: 0 auto;
+  height: var(--alto-nav-inferior);
+  list-style: none;
+  padding: 0;
+}
+
+.nav-inferior__boton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  min-height: var(--toque-minimo);
+  border: 0;
+  background: transparent;
+  color: var(--color-texto-2);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.nav-inferior__boton svg { width: 24px !important; height: 24px !important; }
+.nav-inferior__boton[aria-current="page"] { color: var(--color-marca); }
+
+.nav-inferior__boton--accion .nav-inferior__circulo {
+  width: 52px;
+  height: 52px;
+  margin-top: -18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--color-marca);
+  color: #fff;
+  box-shadow: var(--sombra-flotante);
+}
+.nav-inferior__boton--accion .nav-inferior__circulo svg { width: 28px !important; height: 28px !important; }

@@ -1,0 +1,43 @@
+# Más: opciones secundarias (revelación progresiva) y accesibilidad.
+
+mod_mas_ui <- function(id) {
+  ns <- shiny::NS(id)
+  htmltools::tagList(
+    htmltools::tags$h1(class = "pantalla__titulo", "Más"),
+    htmltools::tags$ul(
+      class = "lista-opciones",
+      item_lista("cash-coin", "Gastos", "Pronto", id = ns("gastos"), class = "action-button"),
+      item_lista("receipt", "Compras y proveedores", "Pronto", id = ns("compras"),
+                 class = "action-button"),
+      item_lista("bar-chart-line", "Informes", "Pronto", id = ns("informes"),
+                 class = "action-button"),
+      item_lista("shop", "Mi negocio", "Pronto", id = ns("negocio"), class = "action-button"),
+      item_lista("question-circle", "Ayuda", "Pronto", id = ns("ayuda"), class = "action-button")
+    ),
+    htmltools::tags$section(
+      class = "tarjeta separado",
+      htmltools::tags$h2(class = "hoja__titulo", "Tamaño de la letra"),
+      htmltools::tags$div(
+        class = "segmentado", role = "group", `aria-label` = "Tamaño de la letra",
+        htmltools::tags$button(type = "button", class = "segmentado__opcion",
+                               `data-tamano-texto` = "normal", `aria-pressed` = "true", "Normal"),
+        htmltools::tags$button(type = "button", class = "segmentado__opcion",
+                               `data-tamano-texto` = "grande", `aria-pressed` = "false", "Grande"),
+        htmltools::tags$button(type = "button", class = "segmentado__opcion",
+                               `data-tamano-texto` = "muy_grande", `aria-pressed` = "false",
+                               "Muy grande")
+      )
+    )
+  )
+}
+
+mod_mas_server <- function(id) {
+  shiny::moduleServer(id, function(input, output, session) {
+    for (opcion in c("gastos", "compras", "informes", "negocio", "ayuda")) {
+      local({
+        o <- opcion
+        shiny::observeEvent(input[[o]], aviso_pronto())
+      })
+    }
+  })
+}

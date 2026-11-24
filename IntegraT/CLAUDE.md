@@ -116,6 +116,7 @@ python -m uv run python -m integrat.db.semillas          # catálogos idempotent
 
 # App y analítica (R, desde la raíz IntegraT/)
 Rscript -e "shiny::runApp('app')"
+Rscript -e "shiny::runApp('app', host = '0.0.0.0', port = 3838)"   # para abrirla desde el celular (misma Wi-Fi)
 Rscript -e "testthat::test_dir('app/tests/testthat')"
 Rscript -e "testthat::test_local('analitica')"
 ```
@@ -124,6 +125,11 @@ API en contenedor (desde la raíz `IntegraT/`): `docker compose -f infra/docker-
 La imagen nunca incluye `.env` (está en `.dockerignore`); recibe la configuración por variables de entorno.
 
 Logs: `integrat/logs.py` enmascara secretos. Los errores de la BD se registran solo por su tipo, nunca con el mensaje del driver (incluye usuario y host).
+
+App Shiny (`app/`):
+- `R/` se carga automáticamente. Archivos: `tema.R` (bslib + recursos), `componentes.R` (botón primario, tarjetas, estados, hoja inferior), `navegacion.R` (barra inferior de 5 secciones) y `mod_<seccion>.R`.
+- Los estilos viven **solo** en `www/css/` (tokens, base, componentes, navegación), sin `style=` en el código R. El JS está en `www/js/app.js`. La fuente Inter se sirve localmente.
+- La prueba con navegador (shinytest2, 390×844) está en `app/tests/testthat/test-app-navegacion.R`. Si chromote falla al arrancar Chrome, basta con repetir la prueba.
 
 Convenciones de BD en MySQL: `docs/CONVENCIONES_BD.md`.
 Cambio de esquema = nueva migración en `api/migrations/versions/` + actualizar `api/src/integrat/db/tablas.py`. La prueba de comparación detecta cualquier diferencia entre ambos.

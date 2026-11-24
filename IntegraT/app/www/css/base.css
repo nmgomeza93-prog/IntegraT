@@ -1,0 +1,88 @@
+/* Base: tipografía, fondo y estructura de pantalla (mobile-first). */
+
+html, body {
+  background: var(--color-fondo);
+  color: var(--color-texto);
+  font-family: var(--fuente);
+  font-size: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-size: var(--texto-cuerpo);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.numero, .tarjeta-numero__valor {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-marca);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+/* Estructura de la app */
+.app-encabezado {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--color-fondo);
+  padding: var(--esp-4) var(--esp-4) var(--esp-2);
+  max-width: var(--ancho-max-contenido);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-3);
+}
+
+.app-encabezado__negocio {
+  font-size: var(--texto-subtitulo);
+  font-weight: 700;
+  margin: 0;
+}
+
+.app-encabezado__fecha {
+  font-size: var(--texto-pequeno);
+  color: var(--color-texto-2);
+  margin: 0;
+}
+
+.app-contenido {
+  max-width: var(--ancho-max-contenido);
+  margin: 0 auto;
+  padding: var(--esp-2) var(--esp-4) calc(var(--alto-nav-inferior) + var(--esp-6));
+}
+
+.pantalla__titulo {
+  font-size: var(--texto-titulo);
+  font-weight: 700;
+  margin: var(--esp-2) 0 var(--esp-4);
+}
+
+.pila > * + * { margin-top: var(--esp-3); }
+
+/* Aviso de reconexión (la app es siempre en línea, pero la señal móvil se corta) */
+#shiny-disconnected-overlay { display: none !important; }
+
+.aviso-conexion {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2000;
+  background: var(--color-atencion-fondo);
+  color: var(--color-atencion);
+  font-weight: 600;
+  font-size: var(--texto-pequeno);
+  text-align: center;
+  padding: var(--esp-2) var(--esp-4);
+  display: none;
+}
+.aviso-conexion.visible { display: block; }

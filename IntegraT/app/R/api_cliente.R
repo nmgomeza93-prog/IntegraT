@@ -1,0 +1,35 @@
+# Cliente de la API de IntegraT (httr2). La app Shiny NO se conecta a la base de datos:
+# todo pasa por la API (docs/PROPUESTA_ARQUITECTURA.md §3). Única configuración: API_BASE_URL.
+
+api_base_url <- function() {
+  url <- Sys.getenv("API_BASE_URL", unset = "")
+  if (!nzchar(url)) url <- "http://127.0.0.1:8000"
+  sub("/+$", "", url)
+}
+
+api_peticion <- function(ruta, tiempo_max = 5) {
+  httr2::request(api_base_url()) |>
+    httr2::req_url_path_append(ruta) |>
+    httr2::req_timeout(tiempo_max) |>
+    httr2::req_user_agent("integrat-app") |>
+    httr2::req_error(is_error = function(resp) FALSE)
+}
+
+# Devuelve list(api = TRUE/FALSE, bd = TRUE/FALSE). Nunca lanza error.
+api_salud <- function(tiempo_max = 3) {
+  resp <- tryCatch(httr2::req_perform(api_peticion("v1/salud", tiempo_max)), error = function(e) NULL)
+  if (is.null(resp)) return(list(api = FALSE, bd = FALSE))
+  cuerpo <- tryCatch(httr2::resp_body_json(resp), error = function(e) NULL)
+  list(api = TRUE, bd = isTRUE(cuerpo$bd$conectada))
+}
+
+# Etiqueta amable del estado de conexión (sin términos técnicos).
+estado_conexion_ui <- function(salud) {
+  if (isTRUE(salud$api) && isTRUE(salud$bd)) {
+    etiqueta_estado("Conectado", "bien")
+  } else if (isTRUE(salud$api)) {
+    etiqueta_estado("Servidor con problemas", "atencion")
+  } else {
+    etiqueta_estado("Sin conexión", "alerta")
+  }
+}
