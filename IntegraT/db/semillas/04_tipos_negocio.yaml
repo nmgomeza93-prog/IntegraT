@@ -1,0 +1,91 @@
+# Tipos de negocio = perfiles de configuración (docs/DISENO_UX.md §6).
+# Agregar un tipo nuevo = agregar filas aquí; no se crean tablas ni pantallas nuevas.
+- tabla: cat_tipo_negocio
+  filas:
+    - codigo: ventas_en_linea
+      nombre: Vendo en línea
+      descripcion: Vendes por WhatsApp, Instagram, Facebook o tu tienda web y entregas a domicilio.
+      icono: bag
+      orden: 1
+      activo: true
+    - codigo: restaurante
+      nombre: Tengo un restaurante o comedor
+      descripcion: Vendes comida y bebida para comer aquí, para llevar o a domicilio.
+      icono: cup-hot
+      orden: 2
+      activo: true
+
+- tabla: core_cfg_tipo_negocio_capacidad
+  filas:
+    - {tipo_negocio_codigo: ventas_en_linea, capacidad: variantes,       activa_por_defecto: true}
+    - {tipo_negocio_codigo: ventas_en_linea, capacidad: entregas,        activa_por_defecto: true}
+    - {tipo_negocio_codigo: ventas_en_linea, capacidad: canales,         activa_por_defecto: true}
+    - {tipo_negocio_codigo: ventas_en_linea, capacidad: clientes_credito, activa_por_defecto: false}
+    - {tipo_negocio_codigo: ventas_en_linea, capacidad: recetas,         activa_por_defecto: false}
+    - {tipo_negocio_codigo: ventas_en_linea, capacidad: insumos,         activa_por_defecto: false}
+    - {tipo_negocio_codigo: ventas_en_linea, capacidad: mesas,           activa_por_defecto: false}
+    - {tipo_negocio_codigo: ventas_en_linea, capacidad: comanda_cocina,  activa_por_defecto: false}
+    - {tipo_negocio_codigo: ventas_en_linea, capacidad: propinas,        activa_por_defecto: false}
+    - {tipo_negocio_codigo: restaurante,     capacidad: variantes,       activa_por_defecto: false}
+    - {tipo_negocio_codigo: restaurante,     capacidad: entregas,        activa_por_defecto: false}
+    - {tipo_negocio_codigo: restaurante,     capacidad: canales,         activa_por_defecto: false}
+    - {tipo_negocio_codigo: restaurante,     capacidad: clientes_credito, activa_por_defecto: false}
+    - {tipo_negocio_codigo: restaurante,     capacidad: recetas,         activa_por_defecto: true}
+    - {tipo_negocio_codigo: restaurante,     capacidad: insumos,         activa_por_defecto: true}
+    - {tipo_negocio_codigo: restaurante,     capacidad: mesas,           activa_por_defecto: true}
+    - {tipo_negocio_codigo: restaurante,     capacidad: comanda_cocina,  activa_por_defecto: false}
+    - {tipo_negocio_codigo: restaurante,     capacidad: propinas,        activa_por_defecto: false}
+
+- tabla: core_cfg_tipo_negocio_vocabulario
+  filas:
+    - {tipo_negocio_codigo: ventas_en_linea, clave: item_singular,  texto: producto}
+    - {tipo_negocio_codigo: ventas_en_linea, clave: item_plural,    texto: productos}
+    - {tipo_negocio_codigo: ventas_en_linea, clave: catalogo,       texto: Productos}
+    - {tipo_negocio_codigo: ventas_en_linea, clave: catalogo_icono, texto: box-seam}
+    - {tipo_negocio_codigo: ventas_en_linea, clave: vender_contexto, texto: Canal}
+    - {tipo_negocio_codigo: restaurante,     clave: item_singular,  texto: platillo}
+    - {tipo_negocio_codigo: restaurante,     clave: item_plural,    texto: platillos}
+    - {tipo_negocio_codigo: restaurante,     clave: catalogo,       texto: Menú}
+    - {tipo_negocio_codigo: restaurante,     clave: catalogo_icono, texto: journal-text}
+    - {tipo_negocio_codigo: restaurante,     clave: vender_contexto, texto: Para}
+
+- tabla: core_cfg_tipo_negocio_plantilla
+  filas:
+    - tipo_negocio_codigo: ventas_en_linea
+      tipo_plantilla: onboarding
+      version_plantilla: 1
+      contenido:
+        primeros_pasos:
+          - {clave: primer_producto, texto: "Agrega tu primer producto con una foto", icono: camera}
+          - {clave: primera_venta,   texto: "Haz tu primera venta", icono: cart}
+          - {clave: gastos_fijos,    texto: "Anota tus gastos fijos", icono: cash-coin}
+    - tipo_negocio_codigo: restaurante
+      tipo_plantilla: onboarding
+      version_plantilla: 1
+      contenido:
+        primeros_pasos:
+          - {clave: cinco_platillos, texto: "Agrega tus 5 platillos más vendidos", icono: journal-text}
+          - {clave: receta_estrella, texto: "Dinos qué lleva tu platillo estrella", icono: basket}
+          - {clave: primera_venta,   texto: "Haz tu primera venta", icono: cart}
+    - tipo_negocio_codigo: ventas_en_linea
+      tipo_plantilla: categorias_gasto
+      version_plantilla: 1
+      contenido:
+        categorias:
+          - {nombre: Publicidad,               es_fijo: false, rol_cuenta: GASTO_PUBLICIDAD}
+          - {nombre: Envíos,                   es_fijo: false, rol_cuenta: GASTO_ENVIOS}
+          - {nombre: Empaques,                 es_fijo: false, rol_cuenta: GASTO_VARIOS}
+          - {nombre: Comisiones,               es_fijo: false, rol_cuenta: GASTO_COMISIONES}
+          - {nombre: Teléfono e internet,      es_fijo: true,  rol_cuenta: GASTO_COMUNICACIONES}
+          - {nombre: Renta,                    es_fijo: true,  rol_cuenta: GASTO_RENTA}
+    - tipo_negocio_codigo: restaurante
+      tipo_plantilla: categorias_gasto
+      version_plantilla: 1
+      contenido:
+        categorias:
+          - {nombre: Renta,                    es_fijo: true,  rol_cuenta: GASTO_RENTA}
+          - {nombre: Sueldos,                  es_fijo: true,  rol_cuenta: GASTO_SUELDOS}
+          - {nombre: "Luz, agua y gas",        es_fijo: false, rol_cuenta: GASTO_SERVICIOS_BASICOS}
+          - {nombre: Desechables,              es_fijo: false, rol_cuenta: GASTO_VARIOS}
+          - {nombre: Teléfono e internet,      es_fijo: true,  rol_cuenta: GASTO_COMUNICACIONES}
+          - {nombre: Mantenimiento,            es_fijo: false, rol_cuenta: GASTO_MANTENIMIENTO}

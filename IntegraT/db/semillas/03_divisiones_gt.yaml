@@ -1,0 +1,27 @@
+# Departamentos de Guatemala (nivel 1), con la numeración oficial 01-22.
+# Los municipios (nivel 2) se cargarán desde una fuente oficial (INE/SAT) en un paso posterior;
+# no se transcriben de memoria para no introducir errores.
+- tabla: cat_division_territorial
+  filas:
+    - {codigo: GT-01, pais_codigo: GT, nivel: 1, nombre: Guatemala,      padre_codigo: null}
+    - {codigo: GT-02, pais_codigo: GT, nivel: 1, nombre: El Progreso,    padre_codigo: null}
+    - {codigo: GT-03, pais_codigo: GT, nivel: 1, nombre: Sacatepéquez,   padre_codigo: null}
+    - {codigo: GT-04, pais_codigo: GT, nivel: 1, nombre: Chimaltenango,  padre_codigo: null}
+    - {codigo: GT-05, pais_codigo: GT, nivel: 1, nombre: Escuintla,      padre_codigo: null}
+    - {codigo: GT-06, pais_codigo: GT, nivel: 1, nombre: Santa Rosa,     padre_codigo: null}
+    - {codigo: GT-07, pais_codigo: GT, nivel: 1, nombre: Sololá,         padre_codigo: null}
+    - {codigo: GT-08, pais_codigo: GT, nivel: 1, nombre: Totonicapán,    padre_codigo: null}
+    - {codigo: GT-09, pais_codigo: GT, nivel: 1, nombre: Quetzaltenango, padre_codigo: null}
+    - {codigo: GT-10, pais_codigo: GT, nivel: 1, nombre: Suchitepéquez,  padre_codigo: null}
+    - {codigo: GT-11, pais_codigo: GT, nivel: 1, nombre: Retalhuleu,     padre_codigo: null}
+    - {codigo: GT-12, pais_codigo: GT, nivel: 1, nombre: San Marcos,     padre_codigo: null}
+    - {codigo: GT-13, pais_codigo: GT, nivel: 1, nombre: Huehuetenango,  padre_codigo: null}
+    - {codigo: GT-14, pais_codigo: GT, nivel: 1, nombre: Quiché,         padre_codigo: null}
+    - {codigo: GT-15, pais_codigo: GT, nivel: 1, nombre: Baja Verapaz,   padre_codigo: null}
+    - {codigo: GT-16, pais_codigo: GT, nivel: 1, nombre: Alta Verapaz,   padre_codigo: null}
+    - {codigo: GT-17, pais_codigo: GT, nivel: 1, nombre: Petén,          padre_codigo: null}
+    - {codigo: GT-18, pais_codigo: GT, nivel: 1, nombre: Izabal,         padre_codigo: null}
+    - {codigo: GT-19, pais_codigo: GT, nivel: 1, nombre: Zacapa,         padre_codigo: null}
+    - {codigo: GT-20, pais_codigo: GT, nivel: 1, nombre: Chiquimula,     padre_codigo: null}
+    - {codigo: GT-21, pais_codigo: GT, nivel: 1, nombre: Jalapa,         padre_codigo: null}
+    - {codigo: GT-22, pais_codigo: GT, nivel: 1, nombre: Jutiapa,        padre_codigo: null}

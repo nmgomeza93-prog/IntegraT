@@ -1,0 +1,21 @@
+# Unidades de medida. Unidades base: UN (unidad), G (masa), ML (volumen).
+# factor_a_base nulo = depende del producto (se define por proveedor/producto, ej. "CAJA de 24").
+# codigo_fel queda pendiente hasta revisar el catálogo de unidades de la SAT (docs/PLAN_FEL.md).
+- tabla: cat_unidad_medida
+  filas:
+    # Primero las bases (las demás las referencian)
+    - {codigo: UN,   nombre: Unidad,  tipo: unidad,  unidad_base_codigo: null, factor_a_base: 1,             codigo_fel: null}
+    - {codigo: G,    nombre: Gramo,   tipo: masa,    unidad_base_codigo: null, factor_a_base: 1,             codigo_fel: null}
+    - {codigo: ML,   nombre: Mililitro, tipo: volumen, unidad_base_codigo: null, factor_a_base: 1,           codigo_fel: null}
+
+- tabla: cat_unidad_medida
+  filas:
+    - {codigo: DOC,  nombre: Docena,  tipo: unidad,  unidad_base_codigo: UN, factor_a_base: 12,              codigo_fel: null}
+    - {codigo: CAJA, nombre: Caja,    tipo: unidad,  unidad_base_codigo: UN, factor_a_base: null,            codigo_fel: null}
+    - {codigo: PAQ,  nombre: Paquete, tipo: unidad,  unidad_base_codigo: UN, factor_a_base: null,            codigo_fel: null}
+    - {codigo: KG,   nombre: Kilogramo, tipo: masa,  unidad_base_codigo: G,  factor_a_base: 1000,            codigo_fel: null}
+    - {codigo: LB,   nombre: Libra,   tipo: masa,    unidad_base_codigo: G,  factor_a_base: 453.59237,       codigo_fel: null}
+    - {codigo: OZ,   nombre: Onza,    tipo: masa,    unidad_base_codigo: G,  factor_a_base: 28.349523125,    codigo_fel: null}
+    - {codigo: QQ,   nombre: Quintal (100 lb), tipo: masa, unidad_base_codigo: G, factor_a_base: 45359.237, codigo_fel: null}
+    - {codigo: L,    nombre: Litro,   tipo: volumen, unidad_base_codigo: ML, factor_a_base: 1000,            codigo_fel: null}
+    - {codigo: GAL,  nombre: Galón,   tipo: volumen, unidad_base_codigo: ML, factor_a_base: 3785.411784,     codigo_fel: null}

@@ -1,0 +1,12 @@
+# Canales y modalidades de venta base (cada negocio activa los suyos más adelante).
+- tabla: cat_canal_venta_base
+  filas:
+    - {codigo: whatsapp,     nombre: WhatsApp,          icono: whatsapp,   orden: 1}
+    - {codigo: instagram,    nombre: Instagram,         icono: instagram,  orden: 2}
+    - {codigo: facebook,     nombre: Facebook,          icono: facebook,   orden: 3}
+    - {codigo: tienda_web,   nombre: Tienda web,        icono: globe,      orden: 4}
+    - {codigo: mostrador,    nombre: En el local,       icono: shop,       orden: 5}
+    - {codigo: mesa,         nombre: Para comer aquí,   icono: cup-hot,    orden: 6}
+    - {codigo: para_llevar,  nombre: Para llevar,       icono: bag-check,  orden: 7}
+    - {codigo: domicilio,    nombre: A domicilio,       icono: bicycle,    orden: 8}
+    - {codigo: app_delivery, nombre: App de delivery,   icono: phone,      orden: 9}

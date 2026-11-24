@@ -1,0 +1,50 @@
+# Regímenes fiscales de Guatemala.
+# ⚠️ Tasas, límites y artículos PENDIENTES de validación por el contador
+#    (docs/REVISION_CONTADOR.md §4, puntos C-03 y C-04). Por eso validado_por_contador = false.
+- tabla: fiscal_cfg_regimen
+  filas:
+    - codigo: GT_IVA_GENERAL
+      pais_codigo: GT
+      impuesto: IVA
+      nombre: IVA - Régimen General
+      nombre_simple: Régimen general (12 % de IVA)
+      usa_credito_fiscal: true
+      parametros: {tasa: 0.12, incluido_en_precio: true, periodicidad: mensual}
+      validado_por_contador: false
+      vigente_desde: 2026-01-01
+    - codigo: GT_IVA_PEQ_CONTRIBUYENTE
+      pais_codigo: GT
+      impuesto: IVA
+      nombre: IVA - Régimen de Pequeño Contribuyente
+      nombre_simple: Pequeño contribuyente (5 % sobre lo que vendes)
+      usa_credito_fiscal: false
+      parametros: {tasa_sobre_ingresos: 0.05, limite_ingresos_anuales: 150000, periodicidad: mensual}
+      validado_por_contador: false
+      vigente_desde: 2026-01-01
+    - codigo: GT_ISR_UTILIDADES
+      pais_codigo: GT
+      impuesto: ISR
+      nombre: ISR - Régimen sobre las Utilidades de Actividades Lucrativas
+      nombre_simple: ISR sobre tus ganancias (25 %)
+      usa_credito_fiscal: false
+      parametros: {tasa: 0.25, pagos_a_cuenta: trimestral}
+      validado_por_contador: false
+      vigente_desde: 2026-01-01
+    - codigo: GT_ISR_SIMPLIFICADO
+      pais_codigo: GT
+      impuesto: ISR
+      nombre: ISR - Régimen Opcional Simplificado sobre Ingresos
+      nombre_simple: ISR sobre lo que vendes (5 % / 7 %)
+      usa_credito_fiscal: false
+      parametros: {tramos_mensuales: [{hasta: 30000, tasa: 0.05}, {hasta: null, tasa: 0.07}], periodicidad: mensual}
+      validado_por_contador: false
+      vigente_desde: 2026-01-01
+    - codigo: INFORMAL
+      pais_codigo: GT
+      impuesto: NINGUNO
+      nombre: Sin inscripción (modo informal)
+      nombre_simple: Todavía no estoy inscrito
+      usa_credito_fiscal: false
+      parametros: {aviso: "Recomendamos inscribirte en la SAT; te orientamos paso a paso."}
+      validado_por_contador: false
+      vigente_desde: 2026-01-01

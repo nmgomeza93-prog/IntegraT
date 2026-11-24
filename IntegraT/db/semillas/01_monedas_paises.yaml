@@ -1,0 +1,14 @@
+# Monedas y países (catálogo global). Guatemala es el país inicial.
+- tabla: cat_moneda
+  filas:
+    - {codigo: GTQ, nombre: Quetzal, simbolo: "Q", decimales: 2}
+    - {codigo: USD, nombre: Dólar estadounidense, simbolo: "US$", decimales: 2}
+
+- tabla: cat_pais
+  filas:
+    - codigo: GT
+      nombre: Guatemala
+      moneda_codigo: GTQ
+      zona_horaria_defecto: America/Guatemala
+      nombre_id_fiscal: NIT
+      activo: true
