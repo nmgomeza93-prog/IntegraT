@@ -61,6 +61,13 @@
       if (window.Shiny) Shiny.setInputValue("accion_rapida", accion.getAttribute("data-accion"), { priority: "event" });
       return;
     }
+    // Opción de elección (onboarding): manda su valor al input indicado
+    var elige = ev.target.closest("[data-elige-input]");
+    if (elige) {
+      var entrada = elige.getAttribute("data-elige-input");
+      if (window.Shiny) Shiny.setInputValue(entrada, elige.getAttribute("data-elige-valor"), { priority: "event" });
+      return;
+    }
     var tam = ev.target.closest("[data-tamano-texto]");
     if (tam) {
       var t = tam.getAttribute("data-tamano-texto");
@@ -71,6 +78,11 @@
 
   document.addEventListener("keydown", function (ev) {
     if (ev.key === "Escape") cerrarHojas();
+    // Enter en un campo de un formulario de entrada = tocar su botón principal
+    if (ev.key === "Enter" && ev.target.matches && ev.target.matches(".entrada .campo input")) {
+      var boton = ev.target.closest(".entrada").querySelector(".boton-primario");
+      if (boton) { ev.preventDefault(); boton.click(); }
+    }
   });
 
   // --- Aviso amable de reconexión ---
@@ -87,5 +99,7 @@
   // El servidor puede pedir cambiar de sección (ej. desde un estado vacío)
   $(document).one("shiny:connected", function () {
     Shiny.addCustomMessageHandler("ir_a_seccion", function (destino) { marcarSeccion(destino); });
+    // Al cambiar de pantalla (registro, onboarding, app) se vuelve arriba
+    Shiny.addCustomMessageHandler("subir", function (_) { window.scrollTo(0, 0); });
   });
 })();

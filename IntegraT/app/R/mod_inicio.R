@@ -1,9 +1,16 @@
 # Inicio: "¿cómo va mi negocio hoy?" (docs/DISENO_UX.md §4.1). Por ahora con datos vacíos.
 
-mod_inicio_ui <- function(id, vocab) {
+mod_inicio_ui <- function(id, vocab, pasos = NULL) {
   ns <- shiny::NS(id)
   htmltools::tags$div(
     class = "pila",
+    if (length(pasos) > 0) {
+      htmltools::tags$section(
+        class = "tarjeta",
+        htmltools::tags$h2(class = "hoja__titulo", "Tus primeros pasos"),
+        lista_pasos(pasos)
+      )
+    },
     tarjeta_numero(
       "Hoy", formato_dinero(0),
       contexto = "Aún no registras ventas hoy.",

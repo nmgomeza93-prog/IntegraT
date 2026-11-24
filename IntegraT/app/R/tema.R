@@ -28,6 +28,7 @@ recursos_integrat <- function() {
     htmltools::tags$link(rel = "stylesheet", href = "css/base.css"),
     htmltools::tags$link(rel = "stylesheet", href = "css/componentes.css"),
     htmltools::tags$link(rel = "stylesheet", href = "css/navegacion.css"),
+    htmltools::tags$link(rel = "stylesheet", href = "css/formularios.css"),
     htmltools::tags$script(src = "js/app.js", defer = NA)
   )
 }

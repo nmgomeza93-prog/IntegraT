@@ -15,6 +15,35 @@ api_peticion <- function(ruta, tiempo_max = 5) {
     httr2::req_error(is_error = function(resp) FALSE)
 }
 
+MENSAJE_SIN_CONEXION <- "No pudimos conectar con IntegraT. Revisa tu internet e intenta de nuevo."
+
+# Texto amable para mostrar cuando la API responde con error (nunca detalles técnicos).
+mensaje_error_api <- function(estado, cuerpo) {
+  detalle <- cuerpo$detail
+  if (is.character(detalle) && length(detalle) == 1 && nzchar(detalle)) return(detalle)
+  if (estado == 422) return("Revisa los datos e intenta de nuevo.")
+  if (estado >= 500) return("Tuvimos un problema de nuestro lado. Intenta de nuevo en un momento.")
+  "No pudimos completar eso. Intenta de nuevo."
+}
+
+# Llamada genérica a la API. Nunca lanza error: devuelve
+# list(ok, estado, cuerpo, mensaje). `estado` = 0 si no hubo conexión.
+# El token (si lo hay) viaja solo en el encabezado Authorization.
+api_llamar <- function(metodo, ruta, cuerpo = NULL, token = NULL, tiempo_max = 10) {
+  peticion <- httr2::req_method(api_peticion(ruta, tiempo_max), metodo)
+  if (!is.null(token)) peticion <- httr2::req_auth_bearer_token(peticion, token)
+  if (!is.null(cuerpo)) peticion <- httr2::req_body_json(peticion, cuerpo)
+  resp <- tryCatch(httr2::req_perform(peticion), error = function(e) NULL)
+  if (is.null(resp)) {
+    return(list(ok = FALSE, estado = 0L, cuerpo = NULL, mensaje = MENSAJE_SIN_CONEXION))
+  }
+  estado <- httr2::resp_status(resp)
+  cuerpo_resp <- tryCatch(httr2::resp_body_json(resp), error = function(e) NULL)
+  ok <- estado >= 200 && estado < 300
+  list(ok = ok, estado = estado, cuerpo = cuerpo_resp,
+       mensaje = if (ok) NULL else mensaje_error_api(estado, cuerpo_resp))
+}
+
 # Devuelve list(api = TRUE/FALSE, bd = TRUE/FALSE). Nunca lanza error.
 api_salud <- function(tiempo_max = 3) {
   resp <- tryCatch(httr2::req_perform(api_peticion("v1/salud", tiempo_max)), error = function(e) NULL)

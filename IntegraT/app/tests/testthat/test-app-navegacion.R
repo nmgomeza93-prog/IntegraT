@@ -1,32 +1,26 @@
 # Prueba de la app en un navegador real con tamaño de celular (390×844).
+# Se entra con una cuenta de la API falsa para ver la navegación inferior.
 test_that("la navegación inferior cambia de sección y el ➕ abre la hoja de acciones", {
   skip_if_not_installed("shinytest2")
   skip_if(is.null(chromote::find_chrome()), "No hay Chrome/Edge disponible")
-  withr::local_envvar(
-    API_BASE_URL = "http://127.0.0.1:9",  # sin API: la app debe seguir funcionando
-    NOT_CRAN = "true"                     # shinytest2 se salta la prueba si no está definido
-  )
 
-  app <- shinytest2::AppDriver$new(
-    testthat::test_path("..", ".."),
-    name = "navegacion", width = 390, height = 844, load_timeout = 30000
-  )
-  on.exit(app$stop(), add = TRUE)
+  url <- iniciar_api_falsa()
+  app <- abrir_app(url, "navegacion")
 
-  visible <- function(selector) {
-    app$get_js(sprintf(
-      "(function(){var e=document.querySelector(\"%s\"); return !!e && e.offsetParent !== null;})()",
-      selector
-    ))
-  }
+  # Antes de entrar no hay navegación inferior
+  expect_false(visible(app, ".nav-inferior"))
+
+  app$click(selector = "#bienvenida-entrar")
+  app$set_inputs("login-correo" = "mari@prueba.com", "login-clave" = "clave-correcta-1")
+  app$click(selector = "#login-entrar")
+  expect_true(esperar_visible(app, ".nav-inferior"))
 
   # Inicio por defecto
-  expect_true(visible("#inicio-ir_productos"))
+  expect_true(visible(app, "#inicio-ir_productos"))
 
   # Ir a Vender
   app$click(selector = ".nav-inferior__boton[data-destino='vender']")
-  app$wait_for_idle()
-  expect_true(visible("#vender-agregar"))
+  expect_true(esperar_visible(app, "#vender-agregar"))
   expect_equal(
     app$get_js("document.querySelector(\"[data-destino='vender']\").getAttribute('aria-current')"),
     "page"
@@ -34,8 +28,7 @@ test_that("la navegación inferior cambia de sección y el ➕ abre la hoja de a
 
   # Ir a Más
   app$click(selector = ".nav-inferior__boton[data-destino='mas']")
-  app$wait_for_idle()
-  expect_true(visible("[data-tamano-texto='grande']"))
+  expect_true(esperar_visible(app, "[data-tamano-texto='grande']"))
 
   # Tamaño de letra grande
   app$click(selector = "[data-tamano-texto='grande']")
@@ -45,8 +38,8 @@ test_that("la navegación inferior cambia de sección y el ➕ abre la hoja de a
   app$click(selector = "[data-abre-hoja='hoja-acciones']")
   expect_true(app$get_js("document.getElementById('hoja-acciones').classList.contains('abierta')"))
 
-  # Sin API: estado amable
-  expect_match(app$get_text("#estado_conexion"), "Sin conexión")
+  # Con la API disponible, el estado dice Conectado
+  expect_match(app$get_text("#estado_conexion"), "Conectado")
 
   # Sin desbordamiento horizontal en el celular
   expect_true(app$get_js("document.documentElement.scrollWidth <= window.innerWidth"))

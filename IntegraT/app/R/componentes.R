@@ -104,3 +104,79 @@ item_lista <- function(icono_nombre, texto, extra = NULL, ...) {
 formato_dinero <- function(valor, simbolo = "Q") {
   paste0(simbolo, " ", formatC(valor, format = "f", digits = 2, big.mark = ","))
 }
+
+# --- Formularios y pantallas de entrada ---------------------------------------------------
+
+# Campo de texto o de contraseña con etiqueta visible. `autocompletar` e `modo` ayudan
+# al teclado del celular (correo, contraseña nueva, etc.).
+campo_texto <- function(id, etiqueta, valor = "", placeholder = NULL, autocompletar = NULL,
+                        modo = NULL, clave = FALSE) {
+  base <- if (clave) {
+    shiny::passwordInput(id, etiqueta, value = valor, placeholder = placeholder, width = "100%")
+  } else {
+    shiny::textInput(id, etiqueta, value = valor, placeholder = placeholder, width = "100%")
+  }
+  atributos <- Filter(Negate(is.null), list(autocomplete = autocompletar, inputmode = modo))
+  if (length(atributos) > 0) {
+    consulta <- htmltools::tagQuery(base)$find("input")
+    base <- do.call(consulta$addAttrs, atributos)$allTags()
+  }
+  htmltools::tags$div(class = "campo", base)
+}
+
+# Mensaje de error visible y anunciado por lectores de pantalla. NULL = sin mensaje.
+mensaje_error <- function(texto) {
+  if (is.null(texto) || !nzchar(texto)) return(NULL)
+  htmltools::tags$p(class = "mensaje-error", role = "alert", icono("exclamation-triangle-fill"),
+                    htmltools::tags$span(texto))
+}
+
+enlace_atras <- function(id, texto = "Atrás") {
+  htmltools::tags$button(id = id, type = "button", class = "enlace-boton action-button",
+                         icono("arrow-left"), htmltools::tags$span(texto))
+}
+
+# Opción grande y táctil: al tocarla manda `valor` al input `input_id` (ya con namespace).
+opcion_grande <- function(input_id, valor, icono_nombre, titulo, detalle = NULL, activa = FALSE) {
+  htmltools::tags$button(
+    type = "button", class = "opcion-grande",
+    `data-elige-input` = input_id, `data-elige-valor` = valor,
+    `aria-pressed` = if (activa) "true" else "false",
+    htmltools::tags$span(class = "opcion-grande__icono", icono(icono_nombre)),
+    htmltools::tags$span(
+      class = "opcion-grande__texto",
+      htmltools::tags$span(class = "opcion-grande__titulo", titulo),
+      if (!is.null(detalle)) htmltools::tags$span(class = "opcion-grande__detalle", detalle)
+    )
+  )
+}
+
+progreso_pasos <- function(actual, total) {
+  htmltools::tags$div(
+    class = "progreso-pasos",
+    htmltools::tags$p(class = "progreso-pasos__texto", paste0("Paso ", actual, " de ", total)),
+    htmltools::tags$div(
+      class = "progreso-pasos__barras", `aria-hidden` = "true",
+      lapply(seq_len(total), function(i) {
+        clase <- "progreso-pasos__barra"
+        if (i <= actual) clase <- paste(clase, "progreso-pasos__barra--hecha")
+        htmltools::tags$span(class = clase)
+      })
+    )
+  )
+}
+
+# Lista de primeros pasos (viene de la plantilla del tipo de negocio).
+lista_pasos <- function(pasos) {
+  htmltools::tags$ul(
+    class = "checklist",
+    lapply(pasos, function(p) {
+      hecho <- isTRUE(p$hecho)
+      htmltools::tags$li(
+        class = paste("checklist__item", if (hecho) "checklist__item--hecho"),
+        icono(if (hecho) "check-circle-fill" else (p$icono %||% "circle")),
+        htmltools::tags$span(p$texto)
+      )
+    })
+  )
+}

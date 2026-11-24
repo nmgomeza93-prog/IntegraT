@@ -1,0 +1,150 @@
+/* Pantallas de entrada (bienvenida, registro, login, onboarding) y formularios.
+   Mobile-first: una tarea por pantalla, objetivos táctiles de 48 px o más. */
+
+.entrada {
+  max-width: var(--ancho-max-contenido);
+  margin: 0 auto;
+  padding: var(--esp-5) var(--esp-4) var(--esp-6);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+}
+
+.entrada__marca {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-2);
+  color: var(--color-marca);
+  font-size: var(--texto-subtitulo);
+  font-weight: 800;
+  margin-top: var(--esp-6);
+}
+.entrada__marca svg { width: 28px !important; height: 28px !important; }
+
+.entrada__titulo {
+  font-size: var(--texto-titulo);
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 0;
+}
+.entrada__texto { color: var(--color-texto-2); margin: 0; }
+.entrada__aparte { margin-top: var(--esp-2); display: flex; flex-direction: column; gap: var(--esp-2); }
+.entrada .boton-secundario { width: 100%; }
+.entrada .estado-vacio { padding-top: var(--esp-5); }
+
+/* Campos */
+.campo .shiny-input-container { width: 100% !important; margin: 0; }
+.campo label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: var(--esp-1);
+}
+.campo .form-control {
+  min-height: var(--toque-minimo);
+  font-size: 1rem; /* 16 px: evita el zoom automático de iOS */
+  border-radius: var(--radio-control);
+  border: 1px solid var(--color-borde);
+  background: var(--color-superficie);
+  color: var(--color-texto);
+  padding: 0 var(--esp-4);
+}
+.campo .form-control:focus {
+  border-color: var(--color-marca);
+  box-shadow: 0 0 0 3px var(--color-marca-suave);
+}
+
+/* Error: color + icono + palabra, nunca solo color */
+.mensaje-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--esp-2);
+  margin: 0;
+  padding: var(--esp-3) var(--esp-4);
+  border-radius: var(--radio-control);
+  background: var(--color-alerta-fondo);
+  color: var(--color-alerta);
+  font-weight: 600;
+  font-size: var(--texto-pequeno);
+}
+.mensaje-error svg { flex-shrink: 0; margin-top: 2px; }
+
+/* Botón de texto (Atrás) */
+.enlace-boton {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--esp-2);
+  min-height: var(--toque-minimo);
+  padding: 0 var(--esp-2);
+  margin-left: calc(var(--esp-2) * -1);
+  border: 0;
+  background: transparent;
+  color: var(--color-marca);
+  font-weight: 600;
+}
+
+/* Opción grande y táctil (tarjetas de elección) */
+.opcion-grande {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-4);
+  width: 100%;
+  min-height: 72px;
+  padding: var(--esp-4);
+  text-align: left;
+  border: 2px solid var(--color-borde);
+  border-radius: var(--radio-tarjeta);
+  background: var(--color-superficie);
+  color: var(--color-texto);
+  box-shadow: var(--sombra-tarjeta);
+}
+.opcion-grande:hover { border-color: var(--color-marca); }
+.opcion-grande[aria-pressed="true"] {
+  border-color: var(--color-marca);
+  background: var(--color-marca-suave);
+}
+.opcion-grande__icono {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--color-marca-suave);
+  color: var(--color-marca);
+}
+.opcion-grande__icono svg { width: 24px !important; height: 24px !important; }
+.opcion-grande__texto { display: flex; flex-direction: column; gap: 2px; }
+.opcion-grande__titulo { font-weight: 700; }
+.opcion-grande__detalle { color: var(--color-texto-2); font-size: var(--texto-pequeno); }
+
+/* Progreso del asistente */
+.progreso-pasos__texto {
+  margin: 0 0 var(--esp-2);
+  font-size: var(--texto-pequeno);
+  font-weight: 600;
+  color: var(--color-texto-2);
+}
+.progreso-pasos__barras { display: flex; gap: var(--esp-2); }
+.progreso-pasos__barra {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-borde);
+}
+.progreso-pasos__barra--hecha { background: var(--color-marca); }
+
+/* Primeros pasos */
+.checklist { list-style: none; margin: 0; padding: 0; }
+.checklist__item {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-3);
+  min-height: var(--toque-minimo);
+  border-bottom: 1px solid var(--color-borde);
+}
+.checklist__item:last-child { border-bottom: 0; }
+.checklist__item svg { flex-shrink: 0; color: var(--color-marca); }
+.checklist__item--hecho { color: var(--color-texto-2); }
+.checklist__item--hecho svg { color: var(--color-bien); }

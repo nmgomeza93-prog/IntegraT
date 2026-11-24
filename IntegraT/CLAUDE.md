@@ -9,7 +9,7 @@ La app hace el trabajo administrativo: contabilidad automática en partida doble
 Contexto inicial: Guatemala (IVA, SAT, FEL), con lo fiscal configurable por país.
 Tipos de negocio del MVP: **ventas en línea** y **restaurantes**. Se agregan otros tipos por configuración, no duplicando código.
 
-**Estado actual: Fase 0 cerrada (análisis y propuesta aprobados). Todavía no hay código de la aplicación.**
+**Estado actual: Fase 1 (fundaciones) en curso. Hecho: repo, base `integrat`, API mínima, app Shiny con diseño y navegación, y la API de cuentas y negocios (registro, login, onboarding). Plan en `docs/PLAN_FASE1.md`.**
 Antes de trabajar, lee `docs/DECISIONES.md` y el documento de `docs/` que corresponda a la tarea.
 
 ## Reglas de seguridad (obligatorias)
@@ -129,7 +129,10 @@ Logs: `integrat/logs.py` enmascara secretos. Los errores de la BD se registran s
 App Shiny (`app/`):
 - `R/` se carga automáticamente. Archivos: `tema.R` (bslib + recursos), `componentes.R` (botón primario, tarjetas, estados, hoja inferior), `navegacion.R` (barra inferior de 5 secciones) y `mod_<seccion>.R`.
 - Los estilos viven **solo** en `www/css/` (tokens, base, componentes, navegación), sin `style=` en el código R. El JS está en `www/js/app.js`. La fuente Inter se sirve localmente.
-- La prueba con navegador (shinytest2, 390×844) está en `app/tests/testthat/test-app-navegacion.R`. Si chromote falla al arrancar Chrome, basta con repetir la prueba.
+- Pantallas (`navset_hidden("pantalla")` en `app.R`): bienvenida → registro / login → onboarding (4 pasos) → app. El encabezado, las secciones y la barra inferior se dibujan con `shell_ui()` (`shell.R`) con el nombre y el vocabulario del negocio que devuelve la API.
+- `sesion.R`: el token vive solo en la memoria del servidor de Shiny (nunca en el navegador). `sesion_llamar()` renueva el token vencido una vez. `api_cliente.R` (`api_llamar()`) nunca lanza error y traduce los fallos a mensajes amables.
+- Las pruebas con navegador (shinytest2, 390×844) usan una **API falsa** en otro proceso (`app/tests/testthat/helper-api-falsa.R`, imita las formas de `/v1`; el contrato real lo cubren las pruebas de `api/`). Si cambias un endpoint que usa la app, actualiza también esa API falsa. Si chromote falla al arrancar Chrome, basta con repetir la prueba.
+- Para ver la app con la API real sin tocar Railway: levanta la API con `DB_*` apuntando a la base local `integrat_test` y define `API_JWT_SECRET`; la app usa `API_BASE_URL`.
 
 Convenciones de BD en MySQL: `docs/CONVENCIONES_BD.md`.
 Cambio de esquema = nueva migración en `api/migrations/versions/` + actualizar `api/src/integrat/db/tablas.py`. La prueba de comparación detecta cualquier diferencia entre ambos.

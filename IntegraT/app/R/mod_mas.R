@@ -12,7 +12,8 @@ mod_mas_ui <- function(id) {
       item_lista("bar-chart-line", "Informes", "Pronto", id = ns("informes"),
                  class = "action-button"),
       item_lista("shop", "Mi negocio", "Pronto", id = ns("negocio"), class = "action-button"),
-      item_lista("question-circle", "Ayuda", "Pronto", id = ns("ayuda"), class = "action-button")
+      item_lista("question-circle", "Ayuda", "Pronto", id = ns("ayuda"), class = "action-button"),
+      item_lista("box-arrow-right", "Salir de mi cuenta", id = ns("salir"), class = "action-button")
     ),
     htmltools::tags$section(
       class = "tarjeta separado",
@@ -31,8 +32,9 @@ mod_mas_ui <- function(id) {
   )
 }
 
-mod_mas_server <- function(id) {
+mod_mas_server <- function(id, al_salir) {
   shiny::moduleServer(id, function(input, output, session) {
+    shiny::observeEvent(input$salir, al_salir())
     for (opcion in c("gastos", "compras", "informes", "negocio", "ayuda")) {
       local({
         o <- opcion
