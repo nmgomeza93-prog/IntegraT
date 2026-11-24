@@ -17,6 +17,14 @@ mod_onboarding_server <- function(id, s, ir_pantalla) {
     creado <- shiny::reactiveVal(NULL)
     error <- shiny::reactiveVal(NULL)
     intento <- shiny::reactiveVal(0L)
+    base_clave <- shiny::reactiveVal(NULL)  # azar propio de este asistente
+
+    # Clave de idempotencia: la misma para los mismos datos (un reintento tras una caída de red
+    # devuelve el negocio ya creado) y distinta si la persona cambió algo (otro negocio).
+    clave_idempotencia <- function(tipo, nombre, factura) {
+      huella <- openssl::sha256(charToRaw(paste(base_clave(), tipo, nombre, factura, sep = "|")))
+      paste0("onb-", substr(as.character(huella), 1, 40))
+    }
 
     # Cada vez que cambia la persona (entra otra o sale), el asistente empieza de cero.
     shiny::observeEvent(s$usuario, {
@@ -25,6 +33,7 @@ mod_onboarding_server <- function(id, s, ir_pantalla) {
       eleccion$nombre <- ""
       creado(NULL)
       error(NULL)
+      base_clave(paste(as.character(openssl::rand_bytes(16)), collapse = ""))
     }, ignoreNULL = FALSE)
 
     tipos <- shiny::reactive({
@@ -133,11 +142,14 @@ mod_onboarding_server <- function(id, s, ir_pantalla) {
     # Aquí se crea el negocio. La guarda por paso evita crearlo dos veces si se toca dos veces.
     shiny::observeEvent(input$factura, {
       if (paso() != 3L) return()
-      r <- sesion_llamar(s, "POST", "v1/negocios", list(
-        nombre = eleccion$nombre,
-        tipo_negocio_codigo = eleccion$tipo,
-        da_factura = input$factura
-      ))
+      r <- sesion_llamar(
+        s, "POST", "v1/negocios",
+        list(nombre = eleccion$nombre, tipo_negocio_codigo = eleccion$tipo,
+             da_factura = input$factura),
+        cabeceras = list(
+          "Idempotency-Key" = clave_idempotencia(eleccion$tipo, eleccion$nombre, input$factura)
+        )
+      )
       if (!r$ok) return(error(r$mensaje))
       error(NULL)
       s$acceso <- r$cuerpo$acceso$access_token  # token ya atado al negocio nuevo

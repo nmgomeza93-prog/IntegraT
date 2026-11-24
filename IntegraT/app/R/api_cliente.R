@@ -29,9 +29,13 @@ mensaje_error_api <- function(estado, cuerpo) {
 # Llamada genérica a la API. Nunca lanza error: devuelve
 # list(ok, estado, cuerpo, mensaje). `estado` = 0 si no hubo conexión.
 # El token (si lo hay) viaja solo en el encabezado Authorization.
-api_llamar <- function(metodo, ruta, cuerpo = NULL, token = NULL, tiempo_max = 10) {
+api_llamar <- function(metodo, ruta, cuerpo = NULL, token = NULL, tiempo_max = 10,
+                       cabeceras = NULL) {
   peticion <- httr2::req_method(api_peticion(ruta, tiempo_max), metodo)
   if (!is.null(token)) peticion <- httr2::req_auth_bearer_token(peticion, token)
+  if (length(cabeceras) > 0) {
+    peticion <- do.call(httr2::req_headers, c(list(peticion), as.list(cabeceras)))
+  }
   if (!is.null(cuerpo)) peticion <- httr2::req_body_json(peticion, cuerpo)
   resp <- tryCatch(httr2::req_perform(peticion), error = function(e) NULL)
   if (is.null(resp)) {

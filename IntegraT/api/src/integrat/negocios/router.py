@@ -3,7 +3,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.engine import Engine
 
 from integrat.auth import seguridad
@@ -18,20 +18,33 @@ Motor = Annotated[Engine, Depends(obtener_engine)]
 
 @router.post("/negocios", response_model=NegocioCreadoOut, status_code=status.HTTP_201_CREATED,
              summary="Crear mi negocio (queda como dueño)")
-def crear(datos: NegocioIn, usuario: Annotated[UsuarioActual, Depends(usuario_actual)],
-          engine: Motor) -> NegocioCreadoOut:
+def crear(
+    datos: NegocioIn,
+    usuario: Annotated[UsuarioActual, Depends(usuario_actual)],
+    engine: Motor,
+    idempotency_key: Annotated[
+        str | None,
+        Header(
+            min_length=8, max_length=100, pattern=r"^[A-Za-z0-9_.:-]+$",
+            description="Clave única por intento (ej. un UUID). Repetirla con los mismos datos "
+                        "devuelve el mismo negocio en lugar de crear otro.",
+        ),
+    ] = None,
+) -> NegocioCreadoOut:
     try:
-        with engine.begin() as con:
-            ctx = servicio.crear_negocio(con, usuario.id, datos)
-            negocio = servicio.leer_negocio(con, ctx)
+        negocio, negocio_id = servicio.crear_negocio_idempotente(
+            engine, usuario.id, datos, idempotency_key
+        )
     except servicio.TipoNegocioInvalido:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             "Ese tipo de negocio no existe.") from None
-    assert negocio is not None  # recién creado en la misma transacción
-    token, segundos = seguridad.crear_token_acceso(usuario.id, ctx.negocio_id)
+    except servicio.ClaveReutilizada:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            "Esa clave ya se usó con otros datos.") from None
+    token, segundos = seguridad.crear_token_acceso(usuario.id, negocio_id)
     return NegocioCreadoOut(
         **negocio.model_dump(),
-        acceso=AccesoOut(access_token=token, expira_en=segundos, negocio_id=ctx.negocio_id),
+        acceso=AccesoOut(access_token=token, expira_en=segundos, negocio_id=negocio_id),
     )
 
 

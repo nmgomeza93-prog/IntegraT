@@ -1,9 +1,12 @@
 """Crear y leer negocios. Todo acceso a tablas de negocio pasa por db.aislamiento."""
 
+import hashlib
+import json
 import uuid
+from datetime import timedelta
 
 import sqlalchemy as sa
-from sqlalchemy.engine import Connection
+from sqlalchemy.engine import Connection, Engine
 
 from integrat.db import aislamiento as ais
 from integrat.db.tablas import (
@@ -12,20 +15,79 @@ from integrat.db.tablas import (
     core_cfg_tipo_negocio_capacidad,
     core_cfg_tipo_negocio_plantilla,
     core_cfg_tipo_negocio_vocabulario,
+    core_idempotencia,
     core_membresia,
     core_membresia_titular,
     core_negocio,
     core_negocio_capacidad,
     core_titular,
 )
-from integrat.db.tipos import uuid7
+from integrat.db.tipos import ahora_utc, uuid7
 from integrat.negocios.esquemas import NegocioIn, NegocioOut, PrimerPaso
 
 PAIS_INICIAL = "GT"  # Guatemala; el país será configurable cuando haya más
+OPERACION_CREAR_NEGOCIO = "crear_negocio"
+VIGENCIA_IDEMPOTENCIA = timedelta(hours=24)
 
 
 class TipoNegocioInvalido(Exception):
     pass
+
+
+class ClaveReutilizada(Exception):
+    """La misma Idempotency-Key llegó con datos distintos."""
+
+
+def _huella(datos: NegocioIn) -> str:
+    return hashlib.sha256(json.dumps(datos.model_dump(), sort_keys=True).encode()).hexdigest()
+
+
+def crear_negocio_idempotente(
+    engine: Engine, usuario_id: uuid.UUID, datos: NegocioIn, clave: str | None
+) -> tuple[NegocioOut, uuid.UUID]:
+    """Crea el negocio una sola vez por (usuario, Idempotency-Key).
+
+    Repetir la misma clave con los mismos datos devuelve el mismo negocio (dobles toques,
+    reintentos por red caída). Sin clave, cada llamada crea un negocio nuevo.
+    """
+    if clave is None:
+        with engine.begin() as con:
+            ctx = crear_negocio(con, usuario_id, datos)
+            return leer_negocio(con, ctx), ctx.negocio_id  # type: ignore[return-value]
+
+    huella = _huella(datos)
+    filtro = sa.and_(
+        core_idempotencia.c.usuario_id == usuario_id,
+        core_idempotencia.c.operacion == OPERACION_CREAR_NEGOCIO,
+        core_idempotencia.c.clave == clave,
+    )
+    for intento in (1, 2):
+        try:
+            with engine.begin() as con:
+                previo = con.execute(sa.select(core_idempotencia).where(filtro)).mappings().first()
+                if previo is not None and previo["creado_en"] < ahora_utc() - VIGENCIA_IDEMPOTENCIA:
+                    con.execute(sa.delete(core_idempotencia).where(filtro))  # clave vencida
+                    previo = None
+                if previo is not None:
+                    if previo["huella"] != huella:
+                        raise ClaveReutilizada
+                    ctx = ais.ContextoNegocio(previo["recurso_id"], usuario_id)
+                    negocio = leer_negocio(con, ctx)
+                    if negocio is not None:
+                        return negocio, ctx.negocio_id
+                    con.execute(sa.delete(core_idempotencia).where(filtro))  # ya no existe
+                ctx = crear_negocio(con, usuario_id, datos)
+                con.execute(sa.insert(core_idempotencia).values(
+                    id=uuid7(), usuario_id=usuario_id, operacion=OPERACION_CREAR_NEGOCIO,
+                    clave=clave, huella=huella, recurso_id=ctx.negocio_id, creado_por=usuario_id,
+                ))
+                return leer_negocio(con, ctx), ctx.negocio_id  # type: ignore[return-value]
+        except sa.exc.IntegrityError:
+            # Carrera: otra petición con la misma clave se confirmó primero. Se reintenta una
+            # vez y ahora la encuentra (y devuelve su negocio).
+            if intento == 2:
+                raise
+    raise AssertionError("inalcanzable")
 
 
 def crear_negocio(con: Connection, usuario_id: uuid.UUID, datos: NegocioIn) -> ais.ContextoNegocio:

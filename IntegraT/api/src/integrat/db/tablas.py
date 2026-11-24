@@ -317,6 +317,21 @@ core_intento_acceso = sa.Table(
     **OPCIONES_TABLA,
 )
 
+core_idempotencia = sa.Table(
+    "core_idempotencia", metadata,
+    col_id(),
+    _fk("usuario_id", UUIDBinario(), "core_usuario.id"),
+    sa.Column("operacion", sa.String(40), nullable=False, comment="Ej. crear_negocio"),
+    sa.Column("clave", sa.String(100), nullable=False, comment="Idempotency-Key del cliente"),
+    sa.Column("huella", sa.CHAR(64), nullable=False, comment="SHA-256 de los datos enviados"),
+    sa.Column("recurso_id", UUIDBinario(), nullable=False,
+              comment="Lo que se creó (ej. el negocio)"),
+    *cols_auditoria(),
+    sa.UniqueConstraint("usuario_id", "operacion", "clave"),
+    comment="Claves de idempotencia de comandos (vigencia 24 horas)",
+    **OPCIONES_TABLA,
+)
+
 PREFIJOS_PERMITIDOS = (
     "cat_", "core_", "fiscal_", "ops_", "cont_", "ia_", "integ_", "dw_", "rpt_", "audit_",
 )

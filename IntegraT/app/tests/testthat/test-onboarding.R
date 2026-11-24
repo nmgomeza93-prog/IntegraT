@@ -96,6 +96,35 @@ test_that("un doble toque en '¿Das factura?' crea un solo negocio", {
   expect_match(app$get_text(".nav-inferior__boton[data-destino='productos']"), "Productos")
 })
 
+test_that("si la respuesta se pierde, reintentar no crea un segundo negocio", {
+  salta_sin_navegador()
+  url <- iniciar_api_falsa()
+  app <- abrir_app(url, "onboarding-reintento")
+
+  app$click(selector = "#bienvenida-crear")
+  app$set_inputs("registro-nombre" = "Mari", "registro-correo" = "reintento@prueba.com",
+                 "registro-clave" = "una-clave-larga-1")
+  app$click(selector = "#registro-crear")
+  expect_true(esperar_visible(app, "[data-elige-valor='restaurante']"))
+  app$click(selector = "[data-elige-valor='restaurante']")
+  expect_true(esperar_visible(app, "#onboarding-seguir_nombre"))
+  app$set_inputs("onboarding-nombre" = "Falla una vez")
+  app$click(selector = "#onboarding-seguir_nombre")
+  expect_true(esperar_visible(app, "[data-elige-valor='no_se']"))
+
+  # Primer toque: el negocio se crea en el servidor pero la respuesta es un error
+  app$click(selector = "[data-elige-valor='no_se']")
+  expect_true(esperar_visible(app, ".mensaje-error"))
+  expect_false(visible(app, "#onboarding-ir_app"))
+  expect_equal(negocios_creados(url), 1L)
+
+  # Segundo toque (mismos datos, misma clave): devuelve el mismo negocio, no crea otro
+  app$click(selector = "[data-elige-valor='no_se']")
+  expect_true(esperar_visible(app, "#onboarding-ir_app"))
+  expect_match(app$get_text("#onboarding-contenido"), "¡Listo, Falla una vez!")
+  expect_equal(negocios_creados(url), 1L)
+})
+
 test_that("iniciar sesión con un negocio existente entra directo a la app", {
   salta_sin_navegador()
   url <- iniciar_api_falsa()

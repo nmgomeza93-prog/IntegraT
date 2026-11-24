@@ -37,14 +37,16 @@ sesion_salir <- function(s) {
 
 # Llama a la API con el token de la sesión. Si el token venció, lo renueva una vez con el
 # token de refresco y repite la llamada; si tampoco sirve, cierra la sesión.
-sesion_llamar <- function(s, metodo, ruta, cuerpo = NULL) {
-  resultado <- api_llamar(metodo, ruta, cuerpo, token = shiny::isolate(s$acceso))
+sesion_llamar <- function(s, metodo, ruta, cuerpo = NULL, cabeceras = NULL) {
+  resultado <- api_llamar(metodo, ruta, cuerpo, token = shiny::isolate(s$acceso),
+                          cabeceras = cabeceras)
   refresco <- shiny::isolate(s$refresco)
   if (resultado$estado == 401L && !is.null(refresco)) {
     renovada <- api_llamar("POST", "v1/auth/refrescar", list(refresh_token = refresco))
     if (renovada$ok) {
       sesion_abrir(s, renovada$cuerpo)
-      resultado <- api_llamar(metodo, ruta, cuerpo, token = renovada$cuerpo$access_token)
+      resultado <- api_llamar(metodo, ruta, cuerpo, token = renovada$cuerpo$access_token,
+                              cabeceras = cabeceras)
     } else if (renovada$estado == 401L) {
       sesion_cerrar(s)
     }

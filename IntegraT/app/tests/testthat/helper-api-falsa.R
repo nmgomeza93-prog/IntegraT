@@ -54,6 +54,7 @@ iniciar_api_falsa <- function(env = parent.frame()) {
     estado <- new.env()
     estado$creados <- 0L
     estado$salidas <- 0L
+    estado$claves <- list()
 
     app <- list(call = function(req) {
       ruta <- req$PATH_INFO
@@ -112,10 +113,19 @@ iniciar_api_falsa <- function(env = parent.frame()) {
           return(json(422, list(detail = "Ese tipo de negocio no existe.")))
         }
         Sys.sleep(0.4)  # para que un doble toque llegue antes de terminar
+        clave <- req$HTTP_IDEMPOTENCY_KEY %||% NULL
+        if (!is.null(clave) && !is.null(estado$claves[[clave]])) {
+          return(json(201, estado$claves[[clave]]))  # misma clave: mismo negocio, no se crea otro
+        }
         estado$creados <- estado$creados + 1L
         n <- negocio("n-nuevo", d$nombre, d$tipo_negocio_codigo, d$da_factura)
         n$acceso <- list(token_type = "bearer", access_token = "token-con-negocio",
                          expira_en = 900, negocio_id = "n-nuevo")
+        if (!is.null(clave)) estado$claves[[clave]] <- n
+        # "Falla una vez": se crea, pero la respuesta se pierde (la primera vez responde 503).
+        if (identical(d$nombre, "Falla una vez") && estado$creados == 1L) {
+          return(json(503, list(detail = "El servicio no está listo. Intenta más tarde.")))
+        }
         return(json(201, n))
       }
       if (ruta == "/v1/negocios/n-mari") {
