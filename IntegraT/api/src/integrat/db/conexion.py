@@ -1,6 +1,7 @@
 """Creación del engine SQLAlchemy hacia MySQL, con TLS y salvaguardas de seguridad."""
 
 import ssl
+from functools import lru_cache
 
 import sqlalchemy as sa
 from sqlalchemy.engine import URL, Engine
@@ -54,3 +55,9 @@ def crear_engine(cfg: ConfigBD | None = None, **kwargs) -> Engine:
                 raise RuntimeError("La conexión no quedó en la base permitida.")
 
     return engine
+
+
+@lru_cache
+def engine_principal() -> Engine:
+    """Engine compartido de la API (base real, DB_* de .env). Se crea una sola vez."""
+    return crear_engine(config_bd(), pool_size=5, max_overflow=5, pool_timeout=10)

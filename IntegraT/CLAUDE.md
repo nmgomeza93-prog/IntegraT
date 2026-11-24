@@ -110,6 +110,7 @@ python -m uv sync
 python -m uv run pytest                                  # todas las pruebas (usan integrat_test)
 python -m uv run pytest tests/test_aislamiento.py::test_cada_negocio_ve_solo_lo_suyo  # una sola
 python -m uv run ruff check .
+python -m uv run uvicorn integrat.main:app --reload      # API en http://localhost:8000 (/v1/salud, /docs)
 python -m uv run alembic upgrade head                    # migra la base real (DB_*)
 python -m uv run python -m integrat.db.semillas          # catálogos idempotentes
 
@@ -118,6 +119,11 @@ Rscript -e "shiny::runApp('app')"
 Rscript -e "testthat::test_dir('app/tests/testthat')"
 Rscript -e "testthat::test_local('analitica')"
 ```
+
+API en contenedor (desde la raíz `IntegraT/`): `docker compose -f infra/docker-compose.yml --env-file .env --profile api up -d --build api`.
+La imagen nunca incluye `.env` (está en `.dockerignore`); recibe la configuración por variables de entorno.
+
+Logs: `integrat/logs.py` enmascara secretos. Los errores de la BD se registran solo por su tipo, nunca con el mensaje del driver (incluye usuario y host).
 
 Convenciones de BD en MySQL: `docs/CONVENCIONES_BD.md`.
 Cambio de esquema = nueva migración en `api/migrations/versions/` + actualizar `api/src/integrat/db/tablas.py`. La prueba de comparación detecta cualquier diferencia entre ambos.

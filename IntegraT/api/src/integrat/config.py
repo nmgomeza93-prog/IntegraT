@@ -78,6 +78,24 @@ class ConfigBDPruebas(ConfigBD):
         return valor
 
 
+class ConfigApp(BaseSettings):
+    """Parámetros generales de la API (sin secretos)."""
+
+    model_config = SettingsConfigDict(env_file=ARCHIVO_ENV, extra="ignore", frozen=True)
+
+    app_env: Literal["dev", "piloto", "prod"] = "dev"
+    api_allowed_origins: str = ""  # lista separada por comas
+
+    @property
+    def origenes_permitidos(self) -> list[str]:
+        return [o.strip() for o in self.api_allowed_origins.split(",") if o.strip()]
+
+
 @lru_cache
 def config_bd() -> ConfigBDReal:
     return ConfigBDReal()  # type: ignore[call-arg]
+
+
+@lru_cache
+def config_app() -> ConfigApp:
+    return ConfigApp()

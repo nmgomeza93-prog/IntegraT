@@ -25,3 +25,21 @@ services:
       interval: 3s
       timeout: 3s
       retries: 40
+
+  # API en contenedor (opcional en desarrollo; así correrá en el servidor y en Azure).
+  #   docker compose -f infra/docker-compose.yml --env-file .env --profile api up -d --build api
+  api:
+    profiles: ["api"]
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+    image: integrat-api:dev
+    container_name: integrat-api
+    env_file: ../.env
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/salud', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
