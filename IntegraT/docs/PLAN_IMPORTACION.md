@@ -71,10 +71,10 @@
 - App: Más → "Importaciones (SHEIN, TEMU…)" (`mod_importaciones.R`): subir, revisar (nombre y categoría
   editables, cobro de la tarjeta en Q, medio de pago), en camino, detalle con rastreo, "Me llegó el paquete"
   (courier, envío local, guía, qué llegó) y anular. Pruebas en `test-importaciones.R`.
-- Pendiente a propósito: recibir en varias entregas (hoy una sola recepción; lo que no llega se da por
-  perdido), prorrateo por peso, lectura del PDF con IA (I3).
+- Varias entregas y reparto por peso: hechos (ver la sección siguiente; migración `0018`).
+- Pendiente a propósito: lectura del PDF con IA (I3), por decisión del dueño.
 
-## Siguiente (2026-11-25, pedido del dueño): varias entregas y reparto por peso
+## Varias entregas y reparto por peso (2026-11-25, hecho)
 - **Varias entregas:** cada "Me llegó el paquete" es una **entrega** (`ops_importacion_recepcion`: fecha,
   guía, courier, envío local, medio de pago) con lo que llegó de cada línea en ella
   (`ops_importacion_recepcion_linea`). La importación queda **"Llegando"** mientras falte algo, y se cierra

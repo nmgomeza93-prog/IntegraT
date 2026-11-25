@@ -502,6 +502,7 @@ iniciar_api_falsa <- function(env = parent.frame()) {
                               item_variante_id = NULL, cantidad = l$cantidad,
                               precio_unitario = sprintf("%.2f", as.numeric(l$precio_unitario)),
                               costo_pedido_q = "50.00", cantidad_recibida = NULL, courier_q = NULL,
+                              pendiente = l$cantidad, cantidad_perdida = NULL, peso = l$peso,
                               costo_unitario_q = NULL, precio_sugerido = NULL)
         }
         imp <- list(id = id, plataforma = d$plataforma, numero_factura = d$numero_factura,
@@ -512,14 +513,15 @@ iniciar_api_falsa <- function(env = parent.frame()) {
                     estado = "en_camino", creada_en = "2026-11-25T10:00:00Z", recibida_en = NULL,
                     guia = NULL, courier_q = NULL, envio_local_q = NULL, nota = NULL,
                     motivo_anulacion = NULL, unidades = sum(vapply(lineas, function(l) l$cantidad, 0L)),
-                    dias_en_camino = 2L, lineas = lineas, productos_nombres = vapply(d$productos, function(x) x$nombre, ""))
+                    dias_en_camino = 2L, lineas = lineas, entregas = list(),
+                    pendientes = sum(vapply(lineas, function(l) l$cantidad, 0L)), productos_nombres = vapply(d$productos, function(x) x$nombre, ""))
         estado$importaciones[[id]] <- imp
         if (!is.null(clave)) estado$claves_importacion[[clave]] <- imp
         return(json(201, imp))
       }
       if (ruta == "/v1/importaciones" && metodo == "GET") {
         todas <- rev(unname(estado$importaciones))
-        en_camino <- Filter(function(i) identical(i$estado, "en_camino"), todas)
+        en_camino <- Filter(function(i) i$estado %in% c("en_camino", "llegando"), todas)
         recibidas <- Filter(function(i) i$estado %in% c("recibida", "recibida_parcial"), todas)
         return(json(200, list(en_camino = lapply(en_camino, importacion_out, FALSE),
                               recibidas = lapply(recibidas, importacion_out, FALSE))))
@@ -528,18 +530,34 @@ iniciar_api_falsa <- function(env = parent.frame()) {
         id <- sub("/recibir$", "", sub("^/v1/importaciones/", "", ruta))
         imp <- estado$importaciones[[id]]
         if (is.null(imp)) return(json(404, list(detail = "No encontramos esa importación.")))
-        if (!identical(imp$estado, "en_camino")) return(json(409, list(detail = "Esta importación ya no está en camino.")))
+        if (!imp$estado %in% c("en_camino", "llegando")) return(json(409, list(detail = "Esta importación ya no está en camino.")))
         d <- leer(req)
-        faltan <- vapply(d$lineas %||% list(), function(l) l$linea_id, "")
+        unidades <- 0L
         imp$lineas <- lapply(imp$lineas, function(l) {
-          r <- Filter(function(x) identical(x$linea_id, l$id), d$lineas %||% list())
-          l$cantidad_recibida <- if (length(r)) r[[1]]$cantidad_recibida else l$cantidad
-          l$courier_q <- "10.00"
-          l$costo_unitario_q <- "60.00000000"
-          l$precio_sugerido <- "92.50"
+          pend <- l$cantidad - (l$cantidad_recibida %||% 0L) - (l$cantidad_perdida %||% 0L)
+          n <- if (is.null(d$lineas)) pend else {
+            r <- Filter(function(x) identical(x$linea_id, l$id), d$lineas)
+            if (length(r)) r[[1]]$cantidad else 0L
+          }
+          if (n > 0) {
+            l$cantidad_recibida <- (l$cantidad_recibida %||% 0L) + n
+            l$courier_q <- "10.00"
+            l$costo_unitario_q <- "60.00000000"
+            l$precio_sugerido <- "92.50"
+            unidades <<- unidades + n
+          }
+          if (isTRUE(d$cerrar) && pend - n > 0) l$cantidad_perdida <- pend - n
+          l$pendiente <- l$cantidad - (l$cantidad_recibida %||% 0L) - (l$cantidad_perdida %||% 0L)
           l
         })
-        imp$estado <- if (length(faltan)) "recibida_parcial" else "recibida"
+        imp$pendientes <- sum(vapply(imp$lineas, function(l) l$pendiente, 0L))
+        perdidas <- any(vapply(imp$lineas, function(l) isTRUE(l$cantidad_perdida > 0), NA))
+        imp$estado <- if (imp$pendientes > 0) "llegando" else if (perdidas) "recibida_parcial" else "recibida"
+        imp$entregas <- c(imp$entregas %||% list(), list(list(
+          numero = length(imp$entregas %||% list()) + 1L, recibida_en = "2026-11-27T10:00:00Z",
+          guia = d$guia, courier_q = sprintf("%.2f", as.numeric(d$courier_q %||% 0)),
+          envio_local_q = "0.00", reparto = d$reparto %||% "valor", cierra = isTRUE(d$cerrar),
+          unidades = unidades)))
         imp$recibida_en <- "2026-11-27T10:00:00Z"
         imp$guia <- d$guia
         imp$courier_q <- sprintf("%.2f", as.numeric(d$courier_q %||% 0))

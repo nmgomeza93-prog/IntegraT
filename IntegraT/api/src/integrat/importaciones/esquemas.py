@@ -25,6 +25,7 @@ class LineaPrevia(BaseModel):
     atributos: dict[str, str]  # solo los que usa la categoría (ej. Talla y Color)
     cantidad: int
     precio_unitario: str  # en la moneda de la factura
+    peso: str | None = None  # de la plantilla (para repartir el courier por peso)
     item_variante_id: uuid.UUID | None = None  # si esa variante ya existe
 
 
@@ -79,6 +80,7 @@ class LineaIn(BaseModel):
     cantidad: Annotated[int, Field(ge=1, le=9999)]
     precio_unitario: Monto
     item_variante_id: uuid.UUID | None = None
+    peso: Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=3)] | None = None
 
 
 class ProductoIn(BaseModel):
@@ -114,17 +116,25 @@ class ImportacionIn(BaseModel):
 
 class RecibirLineaIn(BaseModel):
     linea_id: uuid.UUID
-    cantidad_recibida: Annotated[int, Field(ge=0, le=9999)]
+    cantidad: Annotated[int, Field(ge=0, le=9999)] = Field(
+        description="Lo que llegó en esta entrega."
+    )
 
 
 class RecibirIn(BaseModel):
+    """Una entrega. Sin `lineas`, llegó todo lo que faltaba."""
+
     courier_q: Dinero = Decimal("0")
     envio_local_q: Dinero = Decimal("0")
     medio_pago: MedioPago = "efectivo"
     guia: Annotated[str, StringConstraints(strip_whitespace=True, max_length=60)] | None = None
-    lineas: Annotated[list[RecibirLineaIn], Field(max_length=500)] = Field(
-        default=[], description="Solo las que no llegaron completas; las demás, todo."
+    lineas: Annotated[list[RecibirLineaIn], Field(max_length=500)] | None = Field(
+        default=None, description="Lo que llegó de cada línea; sin esto, todo lo pendiente."
     )
+    cerrar: bool = Field(
+        default=False, description="Lo que todavía falta ya no va a llegar: se da por perdido."
+    )
+    reparto: Literal["valor", "peso"] = "valor"
 
 
 class AnularIn(BaseModel):
@@ -145,9 +155,23 @@ class LineaOut(BaseModel):
     precio_unitario: str  # moneda de la factura
     costo_pedido_q: str  # su parte de la factura en Q
     cantidad_recibida: int | None
+    cantidad_perdida: int | None = None
+    pendiente: int = 0
+    peso: str | None = None
     courier_q: str | None
     costo_unitario_q: str | None  # puesto en Guatemala
     precio_sugerido: str | None = None
+
+
+class EntregaOut(BaseModel):
+    numero: int
+    recibida_en: datetime
+    guia: str | None
+    courier_q: str
+    envio_local_q: str
+    reparto: str
+    cierra: bool
+    unidades: int
 
 
 class ImportacionOut(BaseModel):
@@ -171,6 +195,8 @@ class ImportacionOut(BaseModel):
     motivo_anulacion: str | None
     unidades: int
     dias_en_camino: int
+    pendientes: int = 0
+    entregas: list[EntregaOut] = []
     lineas: list[LineaOut] = []
 
 

@@ -26,6 +26,8 @@ from integrat.db.tablas import (
     ops_categoria,
     ops_importacion,
     ops_importacion_linea,
+    ops_importacion_recepcion,
+    ops_importacion_recepcion_linea,
     ops_insumo,
     ops_item,
     ops_item_variante,
@@ -35,6 +37,7 @@ from integrat.importaciones.esquemas import (
     AnularIn,
     Cuadre,
     EncabezadoPrevio,
+    EntregaOut,
     ImportacionIn,
     ImportacionOut,
     LineaOut,
@@ -81,6 +84,14 @@ class EstadoInvalido(Exception):
 
 class LineaInvalida(Exception):
     pass
+
+
+class SinPeso(Exception):
+    """Se pidió repartir por peso, pero alguna línea que llegó no tiene peso."""
+
+
+class NadaQueRecibir(Exception):
+    """La entrega no trae nada y no cierra la importación."""
 
 
 class ProductoConReceta(Exception):
@@ -148,8 +159,9 @@ def sugerir_categoria(descripcion: str, categorias: list[dict]) -> dict | None:
         for palabra in c["palabras"]:
             clave = sin_tildes(str(palabra))
             hallado = re.search(rf"\b{re.escape(clave)}\b", texto)
-            if hallado and (hallado.start() < posicion
-                            or (hallado.start() == posicion and len(clave) > largo)):
+            if hallado and (
+                hallado.start() < posicion or (hallado.start() == posicion and len(clave) > largo)
+            ):
                 mejor, posicion, largo = c, hallado.start(), len(clave)
     return mejor
 
@@ -254,6 +266,7 @@ def vista_previa(con: Connection, ctx: ais.ContextoNegocio, plantilla: Plantilla
                     atributos=atributos,
                     cantidad=linea.cantidad,
                     precio_unitario=_texto(linea.precio_unitario, 4),
+                    peso=_texto(linea.peso, 3),
                     item_variante_id=None
                     if item_id is None
                     else _variante_existente(con, ctx, item_id, atributos),
@@ -394,6 +407,7 @@ def _confirmar(con: Connection, ctx: ais.ContextoNegocio, datos: ImportacionIn):
                     "precio_unitario": linea.precio_unitario,
                     "cargos_origen": cargo,
                     "costo_pedido_q": q,
+                    "peso": linea.peso,
                     "orden": orden,
                 },
             )
@@ -519,7 +533,7 @@ def _recibir(
     ).first()
     if imp is None:
         raise NoEncontrado
-    if imp.estado != "en_camino":
+    if imp.estado not in ("en_camino", "llegando"):
         raise EstadoInvalido
     filas = [
         SimpleNamespace(**f._mapping)
@@ -530,80 +544,193 @@ def _recibir(
         )
     ]
     por_id = {f.id: f for f in filas}
-    recibidas = {f.id: f.cantidad for f in filas}
-    for r in datos.lineas:
-        if r.linea_id not in por_id or r.cantidad_recibida > por_id[r.linea_id].cantidad:
+    pendiente = {
+        f.id: f.cantidad - (f.cantidad_recibida or 0) - (f.cantidad_perdida or 0) for f in filas
+    }
+    if datos.lineas is None:  # llegó todo lo que faltaba
+        llegan = {i: n for i, n in pendiente.items() if n > 0}
+    else:
+        llegan = {}
+        for r in datos.lineas:
+            if r.linea_id not in por_id or r.cantidad > pendiente[r.linea_id]:
+                raise LineaInvalida
+            if r.cantidad:
+                llegan[r.linea_id] = llegan.get(r.linea_id, 0) + r.cantidad
+        if any(llegan[i] > pendiente[i] for i in llegan):
             raise LineaInvalida
-        recibidas[r.linea_id] = r.cantidad_recibida
+    if not llegan and not datos.cerrar:
+        raise NadaQueRecibir
+    asignado = {f.id: CERO for f in filas}  # lo que ya se pasó a inventario en otras entregas
+    for r in con.execute(
+        ais.seleccionar(
+            ctx,
+            ops_importacion_recepcion_linea,
+            ops_importacion_recepcion_linea.c.linea_id,
+            sa.func.sum(ops_importacion_recepcion_linea.c.costo_q).label("q"),
+        )
+        .where(ops_importacion_recepcion_linea.c.linea_id.in_(list(por_id)))
+        .group_by(ops_importacion_recepcion_linea.c.linea_id)
+    ):
+        asignado[r.linea_id] = Decimal(r.q or 0)
 
-    # Productos y variantes (los nuevos se crean ahora, cuando de verdad llegan).
+    # Productos y variantes de lo que llega (los nuevos se crean ahora, cuando de verdad llegan).
     grupos: OrderedDict[tuple, list] = OrderedDict()
     for f in filas:
+        if f.id not in llegan:
+            continue
         clave = (f.item_id,) if f.item_id else ("nuevo", sin_tildes(f.producto_nombre))
         grupos.setdefault(clave, []).append(f)
     for grupo in grupos.values():
         primera = grupo[0]
+        if primera.item_id is None:  # una entrega anterior ya pudo crear el producto
+            primera.item_id = next(
+                (
+                    f.item_id
+                    for f in filas
+                    if f.item_id
+                    and sin_tildes(f.producto_nombre) == sin_tildes(primera.producto_nombre)
+                ),
+                None,
+            )
         item_id = _preparar_producto(
             con, ctx, primera.producto_nombre, primera.categoria_nombre, primera.item_id, grupo
         )
         for f in grupo:
             f.item_id = item_id
+            for otra in filas:  # las demás líneas del mismo producto ya lo tienen
+                if otra.item_id is None and sin_tildes(otra.producto_nombre) == sin_tildes(
+                    f.producto_nombre
+                ):
+                    otra.item_id = item_id
 
-    # Courier y envío local: por valor, entre lo que llegó.
+    # Lo que pasa a inventario de cada línea: su parte de lo pagado; si con esta entrega la línea
+    # se completa, lo que le falte (así la suma cuadra al centavo).
+    llegando = [f for f in filas if f.id in llegan]
+    costo_q: dict = {}
+    for f in llegando:
+        recibira = (f.cantidad_recibida or 0) + llegan[f.id]
+        if recibira + (f.cantidad_perdida or 0) == f.cantidad:
+            costo_q[f.id] = centavos(f.costo_pedido_q) - asignado[f.id]
+        else:
+            costo_q[f.id] = centavos(f.costo_pedido_q * llegan[f.id] / f.cantidad)
     adicional = centavos((datos.courier_q or CERO) + (datos.envio_local_q or CERO))
-    recibido_q = [centavos(f.costo_pedido_q * recibidas[f.id] / f.cantidad) for f in filas]
-    courier = repartir(
-        [q if recibidas[f.id] else CERO for f, q in zip(filas, recibido_q, strict=True)], adicional
-    )
-    total_inventario = perdido = CERO
-    movimientos = []
-    for f, q, extra in zip(filas, recibido_q, courier, strict=True):
-        cantidad = recibidas[f.id]
-        perdido += centavos(f.costo_pedido_q) - q
-        costo_unitario = (
-            ((q + extra) / cantidad).quantize(OCHO, ROUND_HALF_UP) if cantidad else None
-        )
-        if cantidad:
-            total_inventario += q + extra
-            movimientos.append((f, cantidad, q + extra))
+    if datos.reparto == "peso":
+        if any(f.peso is None or f.peso <= 0 for f in llegando):
+            raise SinPeso
+        pesos = [Decimal(f.peso) * llegan[f.id] / f.cantidad for f in llegando]
+    else:
+        pesos = [costo_q[f.id] for f in llegando]
+    courier = dict(zip([f.id for f in llegando], repartir(pesos, adicional), strict=True))
+
+    # Lo que ya no va a llegar (si se cierra): su parte de lo pagado se da por perdida.
+    perdido = CERO
+    perdidas: dict = {}
+    if datos.cerrar:
+        for f in filas:
+            falta = pendiente[f.id] - llegan.get(f.id, 0)
+            if falta > 0:
+                perdidas[f.id] = falta
+                perdido += centavos(f.costo_pedido_q) - asignado[f.id] - costo_q.get(f.id, CERO)
+
+    numero = (
         con.execute(
-            ais.actualizar(ctx, ops_importacion_linea, ops_importacion_linea.c.id == f.id).values(
-                cantidad_recibida=cantidad,
-                courier_q=extra,
-                costo_unitario_q=costo_unitario,
-                item_id=f.item_id,
-                item_variante_id=f.item_variante_id_final,
-                actualizado_por=ctx.usuario_id,
+            ais.seleccionar(
+                ctx, ops_importacion_recepcion, sa.func.max(ops_importacion_recepcion.c.numero)
+            ).where(ops_importacion_recepcion.c.importacion_id == importacion_id)
+        ).scalar()
+        or 0
+    ) + 1
+    recepcion_id = uuid7()
+    ahora = ahora_utc()
+    con.execute(
+        ais.insertar(
+            ctx,
+            ops_importacion_recepcion,
+            {
+                "id": recepcion_id,
+                "importacion_id": importacion_id,
+                "numero": numero,
+                "recibida_en": ahora,
+                "guia": datos.guia or None,
+                "courier_q": datos.courier_q,
+                "envio_local_q": datos.envio_local_q,
+                "medio_pago": datos.medio_pago,
+                "reparto": datos.reparto,
+                "cierra": datos.cerrar,
+            },
+        )
+    )
+    total_inventario = CERO
+    entradas = []
+    for f in llegando:
+        n = llegan[f.id]
+        costo = costo_q[f.id] + courier[f.id]
+        total_inventario += costo
+        con.execute(
+            ais.insertar(
+                ctx,
+                ops_importacion_recepcion_linea,
+                {
+                    "id": uuid7(),
+                    "recepcion_id": recepcion_id,
+                    "linea_id": f.id,
+                    "cantidad": n,
+                    "costo_q": costo_q[f.id],
+                    "courier_q": courier[f.id],
+                    "costo_unitario_q": (costo / n).quantize(OCHO, ROUND_HALF_UP),
+                },
             )
         )
-
-    # Inventario: cada variante recibe lo suyo, siempre en el mismo orden de insumos.
-    entradas = []
-    for f, cantidad, costo in movimientos:
-        entradas.append(
-            (_insumo_de(con, ctx, f.item_id, f.item_variante_id_final), cantidad, costo)
-        )
-    for insumo_id, cantidad, costo in sorted(entradas, key=lambda e: e[0]):
+        entradas.append((_insumo_de(con, ctx, f.item_id, f.item_variante_id_final), n, costo))
+    for insumo_id, n, costo in sorted(entradas, key=lambda e: e[0]):
         fila = inventario.bloquear(con, ctx, insumo_id)
         inventario.aplicar(
             con,
             ctx,
             fila,
             "entrada",
-            Decimal(cantidad),
+            Decimal(n),
             costo,
             origen_tipo=ORIGEN,
             origen_id=importacion_id,
         )
 
-    estado = "recibida_parcial" if perdido > 0 else "recibida"
+    # Cada línea, al día: recibido, perdido, courier y costo puesto en Guatemala (promedio).
+    for f in filas:
+        if f.id not in llegan and f.id not in perdidas:
+            continue
+        cambios = {"actualizado_por": ctx.usuario_id}
+        if f.id in llegan:
+            n_total = (f.cantidad_recibida or 0) + llegan[f.id]
+            landed = asignado[f.id] + (f.courier_q or CERO) + costo_q[f.id] + courier[f.id]
+            cambios |= {
+                "cantidad_recibida": n_total,
+                "courier_q": (f.courier_q or CERO) + courier[f.id],
+                "costo_unitario_q": (landed / n_total).quantize(OCHO, ROUND_HALF_UP),
+                "item_id": f.item_id,
+                "item_variante_id": f.item_variante_id_final,
+            }
+        if f.id in perdidas:
+            cambios["cantidad_perdida"] = (f.cantidad_perdida or 0) + perdidas[f.id]
+        con.execute(
+            ais.actualizar(ctx, ops_importacion_linea, ops_importacion_linea.c.id == f.id).values(
+                **cambios
+            )
+        )
+
+    falta_total = sum(pendiente.values()) - sum(llegan.values()) - sum(perdidas.values())
+    if falta_total > 0:
+        estado = "llegando"
+    else:
+        hubo_perdidas = bool(perdidas) or any(f.cantidad_perdida for f in filas)
+        estado = "recibida_parcial" if hubo_perdidas else "recibida"
     con.execute(
         ais.actualizar(ctx, ops_importacion, ops_importacion.c.id == importacion_id).values(
             estado=estado,
-            recibida_en=ahora_utc(),
-            guia=datos.guia or None,
-            courier_q=datos.courier_q,
-            envio_local_q=datos.envio_local_q,
+            recibida_en=ahora,
+            guia=datos.guia or imp.guia,
+            courier_q=(imp.courier_q or CERO) + (datos.courier_q or CERO),
+            envio_local_q=(imp.envio_local_q or CERO) + (datos.envio_local_q or CERO),
             medio_pago_courier=datos.medio_pago,
             version=ops_importacion.c.version + 1,
             actualizado_por=ctx.usuario_id,
@@ -614,11 +741,12 @@ def _recibir(
         ctx,
         evento="IMPORTACION_RECEPCION",
         fecha=hoy_del_negocio(con, ctx),
-        descripcion=f"Llegó la importación {imp.plataforma} {imp.numero_orden or ''}".strip(),
+        descripcion=f"Entrega {numero} de la importación {imp.plataforma} "
+        f"{imp.numero_orden or ''}".strip(),
         importes={
             "inventario": centavos(total_inventario),
             "perdido": centavos(perdido),
-            "transito": centavos(imp.total_q),
+            "transito": centavos(sum(costo_q.values(), CERO) + perdido),
             "courier": adicional,
         },
         comodines={"@pago": ROL_POR_MEDIO[datos.medio_pago]},
@@ -627,18 +755,19 @@ def _recibir(
     )
 
     # Los productos nuevos quedan listos para vender: su precio es el sugerido.
-    item_ids = list({f.item_id for f in filas})
-    _, por_variante = precios.calcular(con, ctx, item_ids)
-    for variante_id, info in por_variante.items():
-        if info.precio_sugerido is not None:
-            con.execute(
-                ais.actualizar(
-                    ctx,
-                    ops_item_variante,
-                    ops_item_variante.c.id == variante_id,
-                    ops_item_variante.c.precio_venta == 0,
-                ).values(precio_venta=info.precio_sugerido, actualizado_por=ctx.usuario_id)
-            )
+    item_ids = list({f.item_id for f in llegando})
+    if item_ids:
+        _, por_variante = precios.calcular(con, ctx, item_ids)
+        for variante_id, info in por_variante.items():
+            if info.precio_sugerido is not None:
+                con.execute(
+                    ais.actualizar(
+                        ctx,
+                        ops_item_variante,
+                        ops_item_variante.c.id == variante_id,
+                        ops_item_variante.c.precio_venta == 0,
+                    ).values(precio_venta=info.precio_sugerido, actualizado_por=ctx.usuario_id)
+                )
     return importacion_id, obtener(con, ctx, importacion_id)
 
 
@@ -723,6 +852,9 @@ def _salida(con, ctx, imp, con_lineas: bool) -> ImportacionOut:
                     precio_unitario=_texto(f.precio_unitario, 2),
                     costo_pedido_q=_texto(f.costo_pedido_q),
                     cantidad_recibida=f.cantidad_recibida,
+                    cantidad_perdida=f.cantidad_perdida,
+                    pendiente=f.cantidad - (f.cantidad_recibida or 0) - (f.cantidad_perdida or 0),
+                    peso=_texto(f.peso, 3),
                     courier_q=_texto(f.courier_q),
                     costo_unitario_q=_texto(f.costo_unitario_q),
                     precio_sugerido=None
@@ -730,7 +862,42 @@ def _salida(con, ctx, imp, con_lineas: bool) -> ImportacionOut:
                     else _texto(info.precio_sugerido),
                 )
             )
-    hasta = imp.recibida_en or datetime.now(UTC).replace(tzinfo=None)
+    entregas = []
+    if con_lineas:
+        unidades_por = {
+            r.recepcion_id: int(r.n)
+            for r in con.execute(
+                ais.seleccionar(
+                    ctx,
+                    ops_importacion_recepcion_linea,
+                    ops_importacion_recepcion_linea.c.recepcion_id,
+                    sa.func.sum(ops_importacion_recepcion_linea.c.cantidad).label("n"),
+                ).group_by(ops_importacion_recepcion_linea.c.recepcion_id)
+            )
+        }
+        for e in con.execute(
+            ais.seleccionar(ctx, ops_importacion_recepcion)
+            .where(ops_importacion_recepcion.c.importacion_id == imp.id)
+            .order_by(ops_importacion_recepcion.c.numero)
+        ):
+            entregas.append(
+                EntregaOut(
+                    numero=e.numero,
+                    recibida_en=e.recibida_en.replace(tzinfo=UTC),
+                    guia=e.guia,
+                    courier_q=_texto(e.courier_q),
+                    envio_local_q=_texto(e.envio_local_q),
+                    reparto=e.reparto,
+                    cierra=bool(e.cierra),
+                    unidades=unidades_por.get(e.id, 0),
+                )
+            )
+    en_camino = imp.estado in ("en_camino", "llegando")
+    hasta = (
+        datetime.now(UTC).replace(tzinfo=None)
+        if en_camino or imp.recibida_en is None
+        else imp.recibida_en
+    )
     return ImportacionOut(
         id=imp.id,
         plataforma=imp.plataforma,
@@ -752,6 +919,12 @@ def _salida(con, ctx, imp, con_lineas: bool) -> ImportacionOut:
         motivo_anulacion=imp.motivo_anulacion,
         unidades=sum(f.cantidad for f in filas),
         dias_en_camino=(hasta - imp.creado_en).days,
+        pendientes=sum(
+            f.cantidad - (f.cantidad_recibida or 0) - (f.cantidad_perdida or 0) for f in filas
+        )
+        if imp.estado != "anulada"
+        else 0,
+        entregas=entregas,
         lineas=lineas,
     )
 
@@ -778,7 +951,9 @@ def listar(con: Connection, ctx: ais.ContextoNegocio) -> ListaImportacionesOut:
         .order_by(ops_importacion.c.creado_en.desc())
         .limit(100)
     ).all()
-    en_camino = [_salida(con, ctx, f, False) for f in filas if f.estado == "en_camino"]
+    en_camino = [
+        _salida(con, ctx, f, False) for f in filas if f.estado in ("en_camino", "llegando")
+    ]
     recibidas = [
         _salida(con, ctx, f, False) for f in filas if f.estado in ("recibida", "recibida_parcial")
     ][:30]

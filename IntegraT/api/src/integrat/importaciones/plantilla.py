@@ -65,6 +65,9 @@ ALIAS = {
     "nombre": "nombre_operativo",
     "nombre_bodega": "nombre_operativo",
     "precio_venta": "precio_venta_ref",
+    "peso_kg": "peso",
+    "peso_lb": "peso",
+    "weight": "peso",
 }
 # Donde se corta la descripción larga de la plataforma para sugerir un nombre corto.
 CORTES = re.compile(r"\s+(con|para|en\s+forma|y\s+pantal)\s+|,|\s-\s", re.IGNORECASE)
@@ -103,6 +106,7 @@ class LineaPlantilla:
     talla: str | None
     color: str | None
     precio_venta_ref: Decimal | None
+    peso: Decimal | None = None
 
 
 @dataclass
@@ -313,6 +317,7 @@ def interpretar(registros: list[tuple[int, dict]]) -> Plantilla:
                 precio_venta_ref=_decimal(
                     r.get("precio_venta_ref"), "precio_venta_ref", errores, fila
                 ),
+                peso=_decimal(r.get("peso"), "peso", errores, fila),
             )
         )
     if errores:

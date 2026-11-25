@@ -152,6 +152,15 @@ def recibir(
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "Revisa lo que llegó de cada línea."
         ) from None
+    except servicio.SinPeso:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Para repartir por peso, todo lo que llegó debe tener peso.",
+        ) from None
+    except servicio.NadaQueRecibir:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Dinos qué llegó en este paquete."
+        ) from None
     except servicio.ProductoConReceta:
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Uno de los productos tiene receta. Quítasela para recibirlo."

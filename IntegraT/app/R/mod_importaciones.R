@@ -14,6 +14,7 @@ nombre_plataforma <- function(codigo) {
 texto_estado_importacion <- function(estado) {
   switch(estado %||% "",
     en_camino = etiqueta_estado("En camino", "atencion"),
+    llegando = etiqueta_estado("Llegó una parte", "atencion"),
     recibida = etiqueta_estado("Recibida", "bien"),
     recibida_parcial = etiqueta_estado("Llegó incompleta", "alerta"),
     anulada = etiqueta_estado("Anulada", "neutro"),
@@ -42,6 +43,7 @@ mod_importaciones_server <- function(id, s, ir_a) {
     refresco <- shiny::reactiveVal(0L)
     medio <- shiny::reactiveVal("tarjeta")
     medio_courier <- shiny::reactiveVal("efectivo")
+    reparto <- shiny::reactiveVal("valor")
     llego_todo <- shiny::reactiveVal(TRUE)
     base_clave <- shiny::reactiveVal(NULL)
     nueva_base <- function() base_clave(paste(as.character(openssl::rand_bytes(16)), collapse = ""))
@@ -89,7 +91,7 @@ mod_importaciones_server <- function(id, s, ir_a) {
         paste0(nombre_plataforma(i$plataforma), if (!is.null(i$numero_orden)) paste0(" · ", i$numero_orden),
                " · ", i$unidades, if (i$unidades == 1) " artículo" else " artículos"),
         htmltools::tagList(texto_estado_importacion(i$estado),
-                           if (identical(i$estado, "en_camino")) paste0(" ", i$dias_en_camino, " días"),
+                           if (i$estado %in% c("en_camino", "llegando")) paste0(" ", i$dias_en_camino, " días"),
                            " ", formato_dinero(as.numeric(i$total_q))),
         `data-elige-input` = ns("abrir"), `data-elige-valor` = i$id)
     }
@@ -189,7 +191,7 @@ mod_importaciones_server <- function(id, s, ir_a) {
     # --- Detalle y recibir ----------------------------------------------------------------
     ui_detalle <- function() {
       i <- abierta()
-      en_camino <- identical(i$estado, "en_camino")
+      en_camino <- i$estado %in% c("en_camino", "llegando")
       htmltools::tagList(
         enlace_atras(ns("atras")),
         titulo(paste(nombre_plataforma(i$plataforma), i$numero_orden %||% "")),
@@ -205,30 +207,55 @@ mod_importaciones_server <- function(id, s, ir_a) {
           fila_lista("calendar", if (en_camino) "Días en camino" else "Recibida",
                      if (en_camino) as.character(i$dias_en_camino)
                      else substr(i$recibida_en %||% "", 1, 10)),
-          if (!is.null(i$guia)) fila_lista("upc", "Guía", i$guia)
+          if (!is.null(i$guia)) fila_lista("upc", "Guía", i$guia),
+          if (isTRUE(i$pendientes > 0) && identical(i$estado, "llegando")) {
+            fila_lista("hourglass-split", "Falta que llegue", paste(i$pendientes, "artículos"))
+          }
+        ),
+        if (length(i$entregas) > 0) htmltools::tagList(
+          htmltools::tags$h2(class = "hoja__titulo separado", "Entregas"),
+          htmltools::tags$ul(
+            class = "lista-opciones",
+            lapply(i$entregas, function(e) {
+              fila_lista("box-seam",
+                         paste0("Entrega ", e$numero, " \u00b7 ", e$unidades, " artículos",
+                                if (!is.null(e$guia)) paste0(" \u00b7 ", e$guia),
+                                if (isTRUE(e$cierra)) " \u00b7 cerró la importación"),
+                         paste("courier", formato_dinero(as.numeric(e$courier_q))))
+            })
+          )
         ),
         htmltools::tags$h2(class = "hoja__titulo separado", "Productos"),
         htmltools::tags$ul(
           class = "lista-opciones",
           lapply(i$lineas, function(l) {
+            llego <- if (isTRUE(l$pendiente > 0) || isTRUE(l$cantidad_perdida > 0)) {
+              paste0(l$cantidad_recibida %||% 0L, " de ", l$cantidad, " llegaron \u00b7 ")
+            } else ""
             detalle <- if (!is.null(l$costo_unitario_q)) {
-              paste0("cuesta ", formato_dinero(as.numeric(l$costo_unitario_q)),
+              paste0(llego, "cuesta ", formato_dinero(as.numeric(l$costo_unitario_q)),
                      if (!is.null(l$precio_sugerido)) paste0(" · vende en ",
                                                              formato_dinero(as.numeric(l$precio_sugerido))))
-            } else paste0("×", l$cantidad)
+            } else paste0(llego, "\u00d7", l$cantidad)
             fila_lista("tag", l$nombre, detalle)
           })
         ),
-        if (en_camino) htmltools::tagList(
-          boton_primario(ns("ir_recibir"), "Me llegó el paquete", "box-seam"),
+        if (en_camino) boton_primario(
+          ns("ir_recibir"),
+          if (identical(i$estado, "llegando")) "Llegó otra parte" else "Me llegó el paquete",
+          "box-seam"),
+        if (identical(i$estado, "en_camino")) {
           boton_secundario(ns("anular"), "Anular esta importación", "x-circle")
-        )
+        }
       )
     }
 
     ui_recibir <- function() {
       i <- abierta()
       sel <- shiny::isolate(medio_courier())
+      con_peso <- length(i$lineas) > 0 &&
+        all(vapply(i$lineas, function(l) !is.null(l$peso), NA))
+      sel_reparto <- shiny::isolate(reparto())
       htmltools::tagList(
         enlace_atras(ns("atras_detalle")),
         titulo("Me llegó el paquete"),
@@ -252,9 +279,24 @@ mod_importaciones_server <- function(id, s, ir_a) {
         campo_texto(ns("guia"), "Número de guía (opcional)", autocompletar = "off"),
         htmltools::tags$div(
           class = "casilla",
-          shiny::checkboxInput(ns("todo"), "Llegó todo", value = TRUE, width = "100%")
+          shiny::checkboxInput(ns("todo"), "Llegó todo lo que faltaba", value = TRUE, width = "100%")
         ),
         shiny::uiOutput(ns("que_llego")),
+        if (con_peso) htmltools::tags$div(
+          class = "campo",
+          htmltools::tags$label(id = ns("rep-etiqueta"), "Repartir el courier por"),
+          htmltools::tags$div(
+            class = "segmentado", role = "group", `aria-labelledby` = ns("rep-etiqueta"),
+            htmltools::tags$button(type = "button", class = "segmentado__opcion",
+                                   `data-elige-input` = ns("reparto"), `data-elige-valor` = "valor",
+                                   `aria-pressed` = if (identical(sel_reparto, "valor")) "true" else "false",
+                                   "Valor"),
+            htmltools::tags$button(type = "button", class = "segmentado__opcion",
+                                   `data-elige-input` = ns("reparto"), `data-elige-valor` = "peso",
+                                   `aria-pressed` = if (identical(sel_reparto, "peso")) "true" else "false",
+                                   "Peso")
+          )
+        ),
         mensaje_error(error()),
         boton_primario(ns("confirmar_recibir"), "Guardar: ya lo tengo", "check-lg")
       )
@@ -264,12 +306,18 @@ mod_importaciones_server <- function(id, s, ir_a) {
       if (isTRUE(input$todo)) return(NULL)
       i <- abierta()
       htmltools::tagList(
-        htmltools::tags$p(class = "entrada__texto", "Escribe cuántos llegaron de cada uno:"),
+        htmltools::tags$p(class = "entrada__texto", "Escribe cuántos llegaron en este paquete:"),
         lapply(seq_along(i$lineas), function(k) {
           l <- i$lineas[[k]]
-          campo_texto(ns(paste0("llego_", k)), paste0(l$nombre, " (de ", l$cantidad, ")"),
-                      valor = l$cantidad, autocompletar = "off", modo = "numeric")
-        })
+          if (!isTRUE(l$pendiente > 0)) return(NULL)
+          campo_texto(ns(paste0("llego_", k)), paste0(l$nombre, " (faltan ", l$pendiente, ")"),
+                      valor = l$pendiente, autocompletar = "off", modo = "numeric")
+        }),
+        htmltools::tags$div(
+          class = "casilla",
+          shiny::checkboxInput(ns("cerrar"), "Lo que falta ya no va a llegar", value = FALSE,
+                               width = "100%")
+        )
       )
     })
 
@@ -289,6 +337,7 @@ mod_importaciones_server <- function(id, s, ir_a) {
       ir_a_vista("detalle")
     })
     shiny::observeEvent(input$medio, if (input$medio %in% names(MEDIOS_IMPORTACION_UI)) medio(input$medio))
+    shiny::observeEvent(input$reparto, if (input$reparto %in% c("valor", "peso")) reparto(input$reparto))
     shiny::observeEvent(input$medio_courier, {
       if (input$medio_courier %in% names(MEDIOS_IMPORTACION_UI)) medio_courier(input$medio_courier)
     })
@@ -322,7 +371,7 @@ mod_importaciones_server <- function(id, s, ir_a) {
              lineas = lapply(prod$lineas, function(l) list(
                codigo = l$codigo, descripcion = l$descripcion, atributos = l$atributos,
                cantidad = l$cantidad, precio_unitario = l$precio_unitario,
-               item_variante_id = l$item_variante_id)))
+               item_variante_id = l$item_variante_id, peso = l$peso)))
       })
       cuerpo <- list(plataforma = e$plataforma, numero_factura = e$numero_factura,
                      numero_orden = e$numero_orden, fecha_factura = e$fecha_factura,
@@ -363,23 +412,30 @@ mod_importaciones_server <- function(id, s, ir_a) {
       if (is.null(courier) || is.null(envio)) {
         return(error("Escribe los montos con números, por ejemplo 180 o 180.50."))
       }
-      lineas <- list()
+      lineas <- NULL  # sin lista: llegó todo lo que faltaba
+      cerrar <- FALSE
       if (!isTRUE(input$todo)) {
+        lineas <- list()
         for (k in seq_along(i$lineas)) {
+          pend <- i$lineas[[k]]$pendiente %||% 0L
+          if (pend <= 0) next
           n <- suppressWarnings(as.integer(input[[paste0("llego_", k)]]))
-          if (is.na(n) || n < 0 || n > i$lineas[[k]]$cantidad) {
+          if (is.na(n) || n < 0 || n > pend) {
             return(error(paste0("Revisa cuántos llegaron de ", i$lineas[[k]]$nombre, ".")))
           }
-          if (n < i$lineas[[k]]$cantidad) {
-            lineas[[length(lineas) + 1L]] <- list(linea_id = i$lineas[[k]]$id, cantidad_recibida = n)
-          }
+          if (n > 0) lineas[[length(lineas) + 1L]] <- list(linea_id = i$lineas[[k]]$id, cantidad = n)
         }
+        cerrar <- isTRUE(input$cerrar)
+        if (length(lineas) == 0 && !cerrar) return(error("Dinos qué llegó en este paquete."))
       }
       guia <- trimws(input$guia %||% "")
       r <- sesion_llamar(s, "POST", paste0("v1/importaciones/", i$id, "/recibir"),
-                         list(courier_q = courier, envio_local_q = envio, medio_pago = medio_courier(),
-                              guia = if (nzchar(guia)) guia else NULL, lineas = lineas),
-                         cabeceras = list("Idempotency-Key" = clave("recibir", i$id, courier)))
+                         c(list(courier_q = courier, envio_local_q = envio, medio_pago = medio_courier(),
+                                guia = if (nzchar(guia)) guia else NULL, cerrar = cerrar,
+                                reparto = reparto()),
+                           if (!is.null(lineas)) list(lineas = lineas)),
+                         cabeceras = list("Idempotency-Key" = clave("recibir", i$id, courier,
+                                                                    length(i$entregas))))
       if (!r$ok) return(error(r$mensaje))
       error(NULL)
       abierta(r$cuerpo)

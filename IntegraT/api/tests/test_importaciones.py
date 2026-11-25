@@ -29,17 +29,18 @@ PRODUCTOS = [  # skc, cantidad, precio MXN, descripción, talla, color
 
 
 def plantilla_xlsx(productos=PRODUCTOS, total="969.00", garantia="19", importacion="100",
-                   moneda="MXN", tipo_cambio=None) -> bytes:
+                   moneda="MXN", tipo_cambio=None, pesos=None) -> bytes:
     libro = Workbook()
     hoja = libro.active
     hoja.title = "Factura_camino"
-    hoja.append(COLUMNAS)
+    hoja.append(COLUMNAS + (["peso"] if pesos else []))
     hoja.append(["ENCABEZADO", 1, "INVPRUEBA001", "ORD-PRUEBA-1", "shein", "2026-11-03", moneda,
                  tipo_cambio, float(total) if total else None, float(garantia),
-                 float(importacion), 0] + [None] * 8)
-    for skc, cantidad, precio, descripcion, talla, color in productos:
+                 float(importacion), 0] + [None] * 8 + ([None] if pesos else []))
+    for k, (skc, cantidad, precio, descripcion, talla, color) in enumerate(productos):
         hoja.append(["PRODUCTO"] + [None] * 11 + [skc, cantidad, float(precio), descripcion, None,
-                                                   talla, color, None])
+                                                   talla, color, None]
+                    + ([pesos[k]] if pesos else []))
     salida = io.BytesIO()
     libro.save(salida)
     return salida.getvalue()
@@ -72,7 +73,8 @@ def a_confirmacion(vista: dict, cobro_q="387.60", medio="tarjeta") -> dict:
             "lineas": [{"codigo": x["codigo"], "descripcion": x["descripcion"],
                         "atributos": x["atributos"], "cantidad": x["cantidad"],
                         "precio_unitario": x["precio_unitario"],
-                        "item_variante_id": x["item_variante_id"]} for x in p["lineas"]],
+                        "item_variante_id": x["item_variante_id"], "peso": x["peso"]}
+                       for x in p["lineas"]],
         } for p in vista["productos"]],
     }
 
@@ -213,10 +215,12 @@ def test_recibir_crea_productos_variantes_inventario_y_precio(tienda):
 def test_lo_que_no_llega_se_da_por_perdido(tienda):
     cliente, _, h = tienda
     imp = confirmar(cliente, h, a_confirmacion(previa(cliente, h).json())).json()
-    camara = imp["lineas"][3]
+    *llegaron, camara = imp["lineas"]
     r = cliente.post(f"/v1/importaciones/{imp['id']}/recibir", headers=h, json={
-        "lineas": [{"linea_id": camara["id"], "cantidad_recibida": 0}]})
+        "lineas": [{"linea_id": x["id"], "cantidad": x["cantidad"]} for x in llegaron],
+        "cerrar": True})  # la cámara ya no va a llegar
     assert r.status_code == 200, r.text
+    assert r.json()["lineas"][3]["cantidad_perdida"] == 1 and r.json()["pendientes"] == 0
     assert r.json()["estado"] == "recibida_parcial"
     s = saldos(cliente, h)
     assert s["5102"] == Decimal(camara["costo_pedido_q"]) and "1109" not in s
@@ -278,3 +282,80 @@ def test_permisos_y_aislamiento(tienda, cliente_api, bd_migrada):
                             "WHERE negocio_id = UUID_TO_BIN(:n)"), {"n": negocio["id"]})
     assert cliente.get("/v1/importaciones", headers=h).status_code == 403
     assert previa(cliente, h).status_code == 403
+
+
+
+# ------------------------------------------------------------------ varias entregas y peso
+
+
+def recibir(cliente, h, imp, **cuerpo):
+    return cliente.post(f"/v1/importaciones/{imp['id']}/recibir", headers=h, json=cuerpo)
+
+
+def test_llega_en_dos_entregas(tienda):
+    cliente, _, h = tienda
+    imp = confirmar(cliente, h, a_confirmacion(previa(cliente, h).json())).json()
+    pijama, casa_s, casa_m, camara = imp["lineas"]
+    # Primera entrega: la pijama y 1 de las 2 tallas M; el courier cobra Q20.
+    r = recibir(cliente, h, imp, courier_q="20.00", guia="G-1", lineas=[
+        {"linea_id": pijama["id"], "cantidad": 1}, {"linea_id": casa_m["id"], "cantidad": 1}])
+    assert r.status_code == 200, r.text
+    primera = r.json()
+    assert primera["estado"] == "llegando" and primera["pendientes"] == 3
+    assert [e["numero"] for e in primera["entregas"]] == [1]
+    en_camino = cliente.get("/v1/importaciones", headers=h).json()["en_camino"]
+    assert [x["id"] for x in en_camino] == [imp["id"]]  # sigue en la lista de en camino
+    assert saldos(cliente, h)["1109"] > 0  # una parte sigue en camino
+    # Segunda entrega: todo lo que faltaba; el courier cobra Q40.
+    r = recibir(cliente, h, imp, courier_q="40.00", guia="G-2")
+    assert r.status_code == 200, r.text
+    final = r.json()
+    assert final["estado"] == "recibida" and final["pendientes"] == 0
+    assert [e["unidades"] for e in final["entregas"]] == [2, 3]
+    assert final["courier_q"] == "60.00" and final["guia"] == "G-2"
+    s = saldos(cliente, h)
+    assert "1109" not in s and s["1107"] == Decimal("447.60")  # 387.60 + 60 de courier, cuadra
+    existencias = {i["nombre"]: i["existencia"]
+                   for i in cliente.get("/v1/insumos", headers=h).json()["insumos"]}
+    assert existencias["Dream Adore Conjunto de ropa de estar en casa · M · Rosa"] == "2"
+    assert recibir(cliente, h, imp).status_code == 409  # ya llegó todo
+
+
+def test_cerrar_sin_mas_entregas_da_por_perdido_lo_que_falta(tienda):
+    cliente, _, h = tienda
+    imp = confirmar(cliente, h, a_confirmacion(previa(cliente, h).json())).json()
+    pijama = imp["lineas"][0]
+    recibir(cliente, h, imp, lineas=[{"linea_id": pijama["id"], "cantidad": 1}])
+    r = recibir(cliente, h, imp, lineas=[], cerrar=True)
+    assert r.status_code == 200, r.text
+    assert r.json()["estado"] == "recibida_parcial"
+    s = saldos(cliente, h)
+    assert "1109" not in s
+    assert s["5102"] == Decimal("387.60") - Decimal(pijama["costo_pedido_q"])
+
+
+def test_una_entrega_vacia_no_sirve(tienda):
+    cliente, _, h = tienda
+    imp = confirmar(cliente, h, a_confirmacion(previa(cliente, h).json())).json()
+    r = recibir(cliente, h, imp, lineas=[])
+    assert r.status_code == 422 and "llegó" in r.json()["detail"]
+    r = recibir(cliente, h, imp, lineas=[{"linea_id": imp["lineas"][0]["id"], "cantidad": 2}])
+    assert r.status_code == 422  # pide más de lo que falta
+
+
+def test_el_courier_se_reparte_por_peso(tienda):
+    cliente, _, h = tienda
+    v = previa(cliente, h, plantilla_xlsx(pesos=[0.5, 0.5, 1.0, 2.0])).json()
+    assert v["productos"][0]["lineas"][0]["peso"] == "0.500"
+    imp = confirmar(cliente, h, a_confirmacion(v)).json()
+    r = recibir(cliente, h, imp, courier_q="40.00", reparto="peso")
+    assert r.status_code == 200, r.text
+    # Pesos 0.5, 0.5, 1 y 2 (de 4): la cámara, que pesa la mitad, carga Q20 del courier.
+    assert [x["courier_q"] for x in r.json()["lineas"]] == ["5.00", "5.00", "10.00", "20.00"]
+
+
+def test_por_peso_sin_pesos_no_se_puede(tienda):
+    cliente, _, h = tienda
+    imp = confirmar(cliente, h, a_confirmacion(previa(cliente, h).json())).json()
+    r = recibir(cliente, h, imp, courier_q="40.00", reparto="peso")
+    assert r.status_code == 422 and "peso" in r.json()["detail"]
