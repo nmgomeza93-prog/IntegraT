@@ -148,8 +148,13 @@ class RecetaOut(BaseModel):
     costo_total: str         # por unidad vendida
     costo_completo: bool     # falso si a algún insumo le falta costo: el total se queda corto
     precio_venta: str | None
-    margen: str | None       # precio − costo
-    margen_porcentaje: int | None   # del precio, redondeado
+    margen: str | None       # precio sin IVA − costo
+    margen_porcentaje: int | None   # del precio sin IVA, redondeado
+    # Precio sugerido (integrat.precios): nulo sin receta o con insumos sin costo.
+    precio_sugerido: str | None = None
+    aviso_precio: str | None = None       # "pierde", "bajo", "ok"
+    margen_objetivo_porcentaje: int = 35  # el que se usa (propio o del negocio)
+    margen_propio: bool = False
 
 
 # ------------------------------------------------------------------ mercadería para revender

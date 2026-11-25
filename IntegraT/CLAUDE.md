@@ -23,7 +23,7 @@ Antes de trabajar, lee `docs/DECISIONES.md` y el documento de `docs/` que corres
    - No leas ni muestres el contenido de `.env`.
    - `.env` está en `.gitignore`; `.env.example` lista solo los nombres, sin valores.
    - Los logs registran configuración enmascarada.
-3. **Base de datos: solo `integrat`** (MySQL 9.x en Railway, decisión D-19).
+3. **Base de datos: solo `integrat`** (MySQL 9.x, decisión D-19; hoy en Railway, el piloto irá a Azure por D-23).
    El usuario de `.env` tiene privilegios globales en ese servidor (D-20, riesgo aceptado). Por eso:
    - Toda conexión debe abrir **solo** la base `integrat`.
    - Nunca se ejecutan sentencias contra otras bases (por ejemplo `cam_talent_hub_gestion_cl0` o `erp_pyme_gt`).
@@ -92,7 +92,7 @@ Antes de trabajar, lee `docs/DECISIONES.md` y el documento de `docs/` que corres
 
 ## Hospedaje (`docs/CONFIGURACION_SERVIDOR.md`)
 
-- Piloto (D-21): Shiny en **shinyapps.io**; la API y MySQL en **Railway** (HTTPS que genera Railway). Receta: `infra/railway.md`.
+- Piloto (**D-23**, reemplaza a D-21): la API en **Azure Container Apps** y MySQL en **Azure Database for MySQL Flexible Server**, con secretos en **Key Vault**; Shiny sigue en **shinyapps.io**. Railway deja de usarse (`infra/railway.md` queda como histórico; falta la receta de Azure).
   La API en ejecución usa el usuario `integrat_api` (solo DML sobre `integrat`); las migraciones, `integrat_owner`. La API se endurece antes de abrirla (límite de intentos, `Idempotency-Key`, sin `/docs` fuera de `dev`).
 - Fotos públicas por `r2.dev` en el piloto (dominio propio en producción). La BD guarda llaves, no URLs.
 - Todo en contenedores y configurado por variables de entorno, listo para migrar a Azure (Container Apps + Azure Database for MySQL Flexible Server + Key Vault).
@@ -139,9 +139,11 @@ App Shiny (`app/`):
 - Compras: `mod_compras.R` ("Lo que compraste", dentro de Más y desde la acción rápida "Registrar compra") registra una compra con varias líneas, proveedor opcional que se crea al vuelo, medio de pago, fecha y factura opcional, con una pantalla de revisión antes de guardar; muestra el mes, el detalle y la anulación con motivo, y lista y agrega proveedores. Usa `/v1/compras` y `/v1/proveedores` (`docs/PLAN_COMPRAS.md`): la API suma el total, sube el inventario, recalcula el costo promedio y revierte al anular. En la ficha de un producto, "Lo compro ya hecho para revenderlo" (`/v1/items/{id}/mercaderia`) lo liga a un insumo con receta de 1 unidad.
 - Contabilidad (`docs/PLAN_CONTABILIDAD.md`): la API genera los asientos en la misma transacción de cada venta, anulación, gasto, compra y movimiento de inventario a mano (`integrat/contabilidad/`: `motor.py` con plan por negocio, reglas por rol, cuadre y reversos; `eventos.py` con los importes de cada operación). La app solo muestra: "Tu mes" en el Inicio (`GET /v1/resultados`, se pide cada vez que se vuelve al Inicio), "Tus impuestos" en Más (`mod_impuestos.R`, `PUT /v1/negocios/{id}/impuestos`; el régimen elegido queda en `s$regimen_iva` para no redibujar la app) y "Me dieron factura con mi NIT" en los gastos, solo en el régimen general. Libro diario y saldos (`/v1/asientos`, `/v1/cuentas`) solo por API, para el contador.
 - Caja y dueño (`docs/PLAN_CAJA.md`): `mod_caja.R` ("Caja del día", en Más y desde ➕ "Cerrar el día") abre con un monto, muestra el efectivo esperado y cierra contando, con revisión de la diferencia; `mod_dueno.R` ("Tu dinero y el negocio") anota aportes y retiros. Usan `/v1/caja` y `/v1/dueno`: el esperado sale de los asientos de la cuenta de Caja desde la apertura (con el reloj de la base), y la diferencia genera un asiento de faltante o sobrante. Los comandos nuevos usan `integrat/idempotencia.py` para la `Idempotency-Key`.
+- Inicio (`docs/PLAN_INICIO.md`): "Vendiste hoy" (`/v1/ventas` y `/v1/caja`), "Tu meta del mes" y "Tu mes". La meta es un punto de equilibrio simple cuya fórmula es de `integrat.analitica` (`analitica/R/meta.R`); la app la carga al arrancar con `R/analitica.R` (sin instalar el paquete) y `infra/desplegar_app.R` copia `analitica/R` al paquete que se sube. Fórmulas financieras nuevas van en `analitica/R`, nunca en `app/R`.
+- Precio sugerido (`docs/PLAN_PRECIO_SUGERIDO.md`): lo calcula la API (`integrat/precios.py`) y viaja en los ítems y en la receta (`precio_sugerido`, `aviso_precio`); la app marca "Pierdes"/"Margen bajo" en el catálogo, ofrece "Usar Q…" y el margen propio en la ficha, y "Tu margen de ganancia" en Más (`mod_margen.R`, `PUT /v1/negocios/{id}/precios`; el elegido queda en `s$margen_objetivo`).
 - `sesion.R`: el token vive solo en la memoria del servidor de Shiny (nunca en el navegador). `sesion_llamar()` renueva el token vencido una vez. `api_cliente.R` (`api_llamar()`) nunca lanza error y traduce los fallos a mensajes amables.
 - Las pruebas con navegador (shinytest2, 390×844) usan una **API falsa** en otro proceso (`app/tests/testthat/helper-api-falsa.R`, imita las formas de `/v1`; el contrato real lo cubren las pruebas de `api/`). Si cambias un endpoint que usa la app, actualiza también esa API falsa. Si chromote falla al arrancar Chrome, basta con repetir la prueba.
-- Para ver la app con la API real sin tocar Railway: levanta la API con `DB_*` apuntando a la base local `integrat_test` y define `API_JWT_SECRET`; la app usa `API_BASE_URL`.
+- Para ver la app con la API real sin tocar la base remota: levanta la API con `DB_*` apuntando a la base local `integrat_test` y define `API_JWT_SECRET`; la app usa `API_BASE_URL`.
 
 Convenciones de BD en MySQL: `docs/CONVENCIONES_BD.md`.
 Cambio de esquema = nueva migración en `api/migrations/versions/` + actualizar `api/src/integrat/db/tablas.py`. La prueba de comparación detecta cualquier diferencia entre ambos.

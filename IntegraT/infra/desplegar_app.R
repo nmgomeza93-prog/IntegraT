@@ -4,13 +4,27 @@
 #   Rscript infra/desplegar_app.R              # solo revisa el paquete y lo lista (no sube nada)
 #   Rscript infra/desplegar_app.R --desplegar  # revisa y, si todo está bien, despliega
 #
-# - El paquete lleva SOLO: app.R, R/, www/ y config.yml (lista explícita, nada más).
+# - El paquete lleva SOLO: app.R, R/, www/, config.yml y las fórmulas de analitica/R, que se
+#   copian a analitica/ (lista explícita, nada más; la app las carga con R/analitica.R).
 # - Si encuentra un archivo sospechoso (.env, llaves) o un secreto dentro del texto, FALLA.
 # - Las credenciales de shinyapps.io son las de tu cuenta, guardadas en tu PC con
 #   rsconnect::setAccountInfo(); este script no las lee ni las escribe.
 
 DIR_APP <- "app"
+DIR_ANALITICA <- file.path("analitica", "R")
 NOMBRE_APP <- "integrat"
+
+# Arma una carpeta temporal con la app y las fórmulas de la analítica en analitica/.
+# Devuelve su ruta. Así el paquete lleva la única copia de cada fórmula (la de analitica/R).
+preparar_carpeta <- function(dir_app = DIR_APP, dir_analitica = DIR_ANALITICA) {
+  destino <- tempfile("integrat-app-")
+  dir.create(destino)
+  file.copy(file.path(dir_app, c("app.R", "config.yml", "R", "www")), destino, recursive = TRUE)
+  dir.create(file.path(destino, "analitica"))
+  file.copy(list.files(dir_analitica, pattern = "\\.R$", full.names = TRUE),
+            file.path(destino, "analitica"))
+  destino
+}
 
 # Archivos que entran al paquete (rutas relativas a app/).
 archivos_paquete <- function(dir_app = DIR_APP) {
@@ -19,7 +33,11 @@ archivos_paquete <- function(dir_app = DIR_APP) {
     list.files(file.path(dir_app, "R"), pattern = "\\.R$", full.names = FALSE) |>
       (\(x) file.path("R", x))(),
     list.files(file.path(dir_app, "www"), recursive = TRUE, full.names = FALSE) |>
-      (\(x) file.path("www", x))()
+      (\(x) file.path("www", x))(),
+    if (dir.exists(file.path(dir_app, "analitica"))) {
+      list.files(file.path(dir_app, "analitica"), pattern = "\\.R$", full.names = FALSE) |>
+        (\(x) file.path("analitica", x))()
+    }
   )
   sort(unique(incluir))
 }
@@ -72,6 +90,7 @@ revisar_paquete <- function(archivos, dir_app = DIR_APP) {
 }
 
 desplegar <- function(dir_app = DIR_APP, nombre = NOMBRE_APP) {
+  dir_app <- preparar_carpeta(dir_app)
   archivos <- archivos_paquete(dir_app)
   cat(sprintf("Paquete: %d archivos\n", length(archivos)))
   problemas <- revisar_paquete(archivos, dir_app)

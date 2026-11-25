@@ -16,6 +16,8 @@ NombreCategoria = Annotated[
 Descripcion = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)]
 Precio = Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=2)]
 Icono = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
+# Margen objetivo entre 0 y 0.9 (90 %), con 4 decimales ("0.3500").
+Margen = Annotated[Decimal, Field(ge=0, le=Decimal("0.9"), max_digits=5, decimal_places=4)]
 
 
 # ------------------------------------------------------------------ categorías
@@ -57,6 +59,8 @@ class ItemCambios(BaseModel):
     precio_venta: Precio | None = None
     categoria_id: uuid.UUID | None = None
     descripcion: Descripcion | None = None
+    margen_objetivo: Margen | None = Field(
+        default=None, description="Margen propio para el precio sugerido; null = el del negocio.")
 
 
 class ItemOut(BaseModel):
@@ -71,6 +75,11 @@ class ItemOut(BaseModel):
     archivado: bool
     version: int
     aviso: str | None = None  # ej. "Ya tienes un platillo con ese nombre."
+    # Precio sugerido (lo calcula la API: integrat.precios). Sin receta con costo: nulos.
+    precio_sugerido: str | None = None
+    aviso_precio: str | None = None   # "pierde", "bajo", "ok"
+    margen_objetivo: str = "0.3500"   # el que se usa (propio o del negocio)
+    margen_propio: bool = False
 
     @field_serializer("precio_venta")
     def _precio_como_texto(self, valor: Decimal) -> str:

@@ -415,3 +415,27 @@ def test_todos_los_asientos_de_la_base_cuadran(bd_migrada):
             "SELECT a.id FROM cont_asiento a LEFT JOIN cont_asiento_linea l "
             "ON l.asiento_id = a.id WHERE l.id IS NULL")).all()
     assert descuadrados == [] and vacios == []
+
+
+# ------------------------------------------------------------------ datos para la meta del mes
+
+
+def test_resultados_entrega_gastos_fijos_y_margen_objetivo(restaurante):
+    cliente, _, h = restaurante
+    mes = resultados(cliente, h)
+    assert mes["gastos_fijos"] == "0.00" and mes["margen_objetivo"] == "0.3500"
+    gastar(cliente, h, categoria(cliente, h, "Renta"), "2000.00")          # fijo
+    gastar(cliente, h, categoria(cliente, h, "Desechables"), "50.00")      # variable
+    assert resultados(cliente, h)["gastos_fijos"] == "2000.00"
+
+
+def test_sin_fijos_este_mes_usa_los_del_mes_anterior(restaurante):
+    from datetime import date, timedelta
+
+    cliente, _, h = restaurante
+    hoy = date.today()
+    del_mes_pasado = (hoy.replace(day=1) - timedelta(days=1)).isoformat()
+    gastar(cliente, h, categoria(cliente, h, "Renta"), "1800.00", fecha=del_mes_pasado)
+    assert resultados(cliente, h)["gastos_fijos"] == "1800.00"
+    gastar(cliente, h, categoria(cliente, h, "Sueldos"), "500.00")  # ya hay fijos este mes
+    assert resultados(cliente, h)["gastos_fijos"] == "500.00"

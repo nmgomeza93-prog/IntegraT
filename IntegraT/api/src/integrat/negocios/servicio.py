@@ -32,7 +32,7 @@ from integrat.db.tipos import ahora_utc, uuid7
 from integrat.gastos.servicio import sembrar_categorias as sembrar_categorias_gasto
 from integrat.insumos.recetas import contar_items_con_receta
 from integrat.items.servicio import sembrar_catalogo
-from integrat.negocios.esquemas import ImpuestosIn, NegocioIn, NegocioOut, PrimerPaso
+from integrat.negocios.esquemas import ImpuestosIn, NegocioIn, NegocioOut, PreciosIn, PrimerPaso
 
 PAIS_INICIAL = "GT"  # Guatemala; el país será configurable cuando haya más
 OPERACION_CREAR_NEGOCIO = "crear_negocio"
@@ -158,6 +158,12 @@ def crear_negocio(con: Connection, usuario_id: uuid.UUID, datos: NegocioIn) -> a
     return ctx
 
 
+def fijar_precios(con: Connection, ctx: ais.ContextoNegocio, datos: PreciosIn) -> None:
+    """Margen objetivo del negocio: lo usan el precio sugerido y la meta del mes."""
+    con.execute(sa.update(core_negocio).where(core_negocio.c.id == ctx.negocio_id).values(
+        margen_objetivo_defecto=datos.margen_objetivo, actualizado_por=ctx.usuario_id))
+
+
 def _regimen_simple(codigo: str | None) -> str:
     return next((simple for simple, c in REGIMEN_IVA.items() if c == codigo and c), "no_se")
 
@@ -268,5 +274,6 @@ def leer_negocio(con: Connection, ctx: ais.ContextoNegocio) -> NegocioOut | None
         pais_codigo=negocio["pais_codigo"], moneda_codigo=negocio["moneda_codigo"],
         zona_horaria=negocio["zona_horaria"], da_factura=estado.get("da_factura", "no_se"),
         regimen_iva=_regimen_simple(regimen),
+        margen_objetivo=f"{negocio['margen_objetivo_defecto']:.4f}",
         capacidades=list(capacidades), vocabulario=vocabulario, primeros_pasos=pasos,
     )

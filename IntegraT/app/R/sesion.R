@@ -10,7 +10,8 @@ sesion_nueva <- function() {
     abrir_compra = 0L,  # ídem para "Registrar compra"
     abrir_cierre = 0L,  # ídem para "Cerrar el día"
     cuentas_v = 0L,  # sube cuando cambia algo que mueve las cuentas (para el resumen del Inicio)
-    regimen_iva = NULL  # el régimen elegido en "Tus impuestos" (si no, el del negocio)
+    regimen_iva = NULL,  # el régimen elegido en "Tus impuestos" (si no, el del negocio)
+    margen_objetivo = NULL  # el margen elegido en "Tu margen de ganancia" (si no, el del negocio)
   )
 }
 
@@ -36,6 +37,7 @@ sesion_cerrar <- function(s) {
   s$abrir_cierre <- 0L
   s$cuentas_v <- 0L
   s$regimen_iva <- NULL
+  s$margen_objetivo <- NULL
   invisible(s)
 }
 

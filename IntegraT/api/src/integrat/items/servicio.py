@@ -12,6 +12,7 @@ from datetime import timedelta
 import sqlalchemy as sa
 from sqlalchemy.engine import Connection, Engine
 
+from integrat import precios
 from integrat.db import aislamiento as ais
 from integrat.db.tablas import (
     core_cfg_tipo_negocio_plantilla,
@@ -240,12 +241,21 @@ def _consulta_items(ctx: ais.ContextoNegocio, incluir_eliminados: bool = False) 
     )
 
 
-def _item_out(fila, aviso: str | None = None) -> ItemOut:
+def _item_out(fila, aviso: str | None = None,
+              precio: precios.InfoPrecio | None = None) -> ItemOut:
+    extra = {}
+    if precio is not None:
+        extra = {
+            "precio_sugerido": None if precio.precio_sugerido is None
+            else f"{precio.precio_sugerido:.2f}",
+            "aviso_precio": precio.aviso, "margen_objetivo": f"{precio.margen_objetivo:.4f}",
+            "margen_propio": precio.margen_propio,
+        }
     return ItemOut(
         id=fila.id, tipo_item=fila.tipo_item, nombre=fila.nombre, descripcion=fila.descripcion,
         categoria_id=fila.categoria_id, categoria_nombre=fila.categoria_nombre,
         precio_venta=fila.precio_venta, se_vende=bool(fila.se_vende),
-        archivado=fila.eliminado_en is not None, version=fila.version, aviso=aviso,
+        archivado=fila.eliminado_en is not None, version=fila.version, aviso=aviso, **extra,
     )
 
 
@@ -254,7 +264,7 @@ def obtener_item(con: Connection, ctx: ais.ContextoNegocio, item_id: uuid.UUID,
     fila = con.execute(_consulta_items(ctx).where(ops_item.c.id == item_id)).first()
     if fila is None:
         raise NoEncontrado
-    return _item_out(fila, aviso)
+    return _item_out(fila, aviso, precios.para_items(con, ctx, [item_id]).get(item_id))
 
 
 def listar_items(con: Connection, ctx: ais.ContextoNegocio, *, categoria_id: uuid.UUID | None,
@@ -273,7 +283,8 @@ def listar_items(con: Connection, ctx: ais.ContextoNegocio, *, categoria_id: uui
     filas = con.execute(
         consulta.order_by(ops_item.c.nombre, ops_item.c.id).limit(limite).offset(desplazar)
     ).all()
-    return ListaItemsOut(total=total, items=[_item_out(f) for f in filas])
+    info = precios.para_items(con, ctx, [f.id for f in filas])
+    return ListaItemsOut(total=total, items=[_item_out(f, precio=info.get(f.id)) for f in filas])
 
 
 def _aviso_nombre_repetido(con, ctx, nombre: str, tipo_item: str,
@@ -375,6 +386,8 @@ def actualizar_item(con: Connection, ctx: ais.ContextoNegocio, item_id: uuid.UUI
                 con, ctx, cambios.categoria_id):
             raise CategoriaInvalida
         valores["categoria_id"] = cambios.categoria_id
+    if "margen_objetivo" in enviados:
+        valores["margen_objetivo"] = cambios.margen_objetivo  # null = vuelve al del negocio
 
     resultado = con.execute(
         ais.actualizar(ctx, ops_item, ops_item.c.id == item_id,

@@ -16,6 +16,7 @@ from integrat.negocios.esquemas import (
     NegocioCreadoOut,
     NegocioIn,
     NegocioOut,
+    PreciosIn,
 )
 
 router = APIRouter(tags=["negocios"])
@@ -78,4 +79,18 @@ def fijar_impuestos(negocio_id: uuid.UUID, datos: ImpuestosIn,
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo el dueño puede cambiar esto.")
     with engine.begin() as con:
         servicio.fijar_impuestos(con, acceso.contexto, datos)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put("/negocios/{negocio_id}/precios", status_code=status.HTTP_204_NO_CONTENT,
+            summary="Tu margen objetivo (para el precio sugerido y la meta)")
+def fijar_precios(negocio_id: uuid.UUID, datos: PreciosIn,
+                  acceso: Annotated[AccesoNegocio, Depends(acceso_negocio)],
+                  engine: Motor) -> Response:
+    if negocio_id != acceso.contexto.negocio_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No encontramos ese negocio.")
+    if acceso.rol not in {"dueno", "administrador"}:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No tienes permiso para cambiar esto.")
+    with engine.begin() as con:
+        servicio.fijar_precios(con, acceso.contexto, datos)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

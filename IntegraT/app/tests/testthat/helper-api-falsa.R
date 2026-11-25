@@ -95,10 +95,11 @@ iniciar_api_falsa <- function(env = parent.frame()) {
     negocio <- function(id, nombre, tipo, factura) {
       list(id = id, nombre = nombre, tipo_negocio_codigo = tipo, pais_codigo = "GT",
            moneda_codigo = "GTQ", zona_horaria = "America/Guatemala", da_factura = factura,
-           regimen_iva = estado$regimen, capacidades = list("recetas", "mesas"),
+           regimen_iva = estado$regimen, margen_objetivo = estado$margen, capacidades = list("recetas", "mesas"),
            vocabulario = vocab[[tipo]], primeros_pasos = pasos_al_dia(tipo))
     }
     estado$regimen <- "no_se"
+    estado$margen <- "0.3500"
     estado$caja <- NULL          # la sesión abierta
     estado$cierres <- list()
     estado$cierres_hechos <- 0L
@@ -258,7 +259,35 @@ iniciar_api_falsa <- function(env = parent.frame()) {
            costo_completo = !any(vapply(salidas, function(l) l$sin_costo, NA)),
            precio_venta = it$precio_venta,
            margen = if (hay) sprintf("%.2f", precio - total),
-           margen_porcentaje = if (hay) as.integer(round((precio - total) * 100 / precio)))
+           margen_porcentaje = if (hay) as.integer(round((precio - total) * 100 / precio)),
+           precio_sugerido = con_precio(it)$precio_sugerido,
+           aviso_precio = con_precio(it)$aviso_precio,
+           margen_objetivo_porcentaje = as.integer(round(100 * as.numeric(con_precio(it)$margen_objetivo))),
+           margen_propio = con_precio(it)$margen_propio)
+    }
+    # Precio sugerido, versión simple de integrat.precios: costo / (1 - margen), con IVA en el
+    # régimen general, hacia arriba a Q0.50; aviso "pierde", "bajo" u "ok".
+    costo_de <- function(it) {
+      lineas <- estado$recetas[[it$id]] %||% list()
+      if (length(lineas) == 0) return(NULL)
+      sum(vapply(lineas, function(l) as.numeric(l$cantidad) *
+                   (estado$insumos[[l$insumo_id]]$costo %||% 0), 0))
+    }
+    con_precio <- function(it) {
+      margen <- as.numeric(it$margen_propio_valor %||% estado$margen)
+      it$margen_objetivo <- sprintf("%.4f", margen)
+      it$margen_propio <- !is.null(it$margen_propio_valor)
+      it$margen_propio_valor <- NULL
+      costo <- costo_de(it)
+      it["precio_sugerido"] <- list(NULL)
+      it["aviso_precio"] <- list(NULL)
+      if (!is.null(costo) && costo > 0) {
+        iva <- if (identical(estado$regimen, "general")) 1.12 else 1
+        it$precio_sugerido <- sprintf("%.2f", ceiling(costo / (1 - margen) * iva * 2 - 1e-9) / 2)
+        neto <- as.numeric(it$precio_venta) / iva
+        it$aviso_precio <- if (neto < costo) "pierde" else if ((neto - costo) / neto < margen) "bajo" else "ok"
+      }
+      it
     }
     proveedor_por_nombre <- function(nombre) {
       for (p in estado$proveedores) if (identical(tolower(p$nombre), tolower(nombre))) return(p)
@@ -302,6 +331,7 @@ iniciar_api_falsa <- function(env = parent.frame()) {
                               anulaciones_compra = estado$anulaciones_compra,
                               proveedores = length(estado$proveedores),
                               regimen = estado$regimen,
+                              margen = estado$margen,
                               cierres = estado$cierres_hechos,
                               caja_abierta = !is.null(estado$caja),
                               dueno = length(estado$dueno),
@@ -398,6 +428,13 @@ iniciar_api_falsa <- function(env = parent.frame()) {
           return(json(503, list(detail = "El servicio no está listo. Intenta más tarde.")))
         }
         return(json(201, n))
+      }
+      if (grepl("^/v1/negocios/[^/]+/precios$", ruta) && metodo == "PUT") {
+        d <- leer(req)
+        m <- suppressWarnings(as.numeric(d$margen_objetivo))
+        if (is.na(m) || m < 0 || m > 0.9) return(json(422, list(detail = "Revisa los datos e intenta de nuevo.")))
+        estado$margen <- sprintf("%.4f", m)
+        return(json(200, list()))
       }
       if (grepl("^/v1/negocios/[^/]+/impuestos$", ruta) && metodo == "PUT") {
         d <- leer(req)
@@ -497,7 +534,10 @@ iniciar_api_falsa <- function(env = parent.frame()) {
           mes = format(Sys.Date(), "%Y-%m"), vendiste = sprintf("%.2f", ventas),
           costo_de_lo_vendido = "0.00", se_perdio = "0.00", gastaste = sprintf("%.2f", gastos),
           otros_ingresos = "0.00", te_queda = sprintf("%.2f", ventas - gastos),
-          sin_iva = identical(estado$regimen, "general"))))
+          sin_iva = identical(estado$regimen, "general"),
+          gastos_fijos = sprintf("%.2f", sum(vapply(Filter(function(g) isTRUE(g$es_fijo), estado$gastos),
+                                                    function(g) as.numeric(g$monto), 0))),
+          margen_objetivo = "0.3500")))
       }
       if (ruta == "/v1/negocios/n-nuevo" && metodo == "GET") {
         return(json(200, negocio("n-nuevo", estado$nombre_nuevo, estado$tipo, estado$factura_nueva)))
@@ -524,7 +564,7 @@ iniciar_api_falsa <- function(env = parent.frame()) {
       if (ruta == "/v1/items" && metodo == "GET") {
         vivos <- unname(estado$items[estado$orden_items[estado$orden_items %in% names(estado$items)]])
         vivos <- vivos[order(vapply(vivos, function(i) tolower(i$nombre), ""))]
-        return(json(200, list(total = length(vivos), items = vivos)))
+        return(json(200, list(total = length(vivos), items = lapply(vivos, con_precio))))
       }
       if (ruta == "/v1/items" && metodo == "POST") {
         d <- leer(req)
@@ -993,7 +1033,7 @@ iniciar_api_falsa <- function(env = parent.frame()) {
         id <- id_de_ruta(ruta)
         it <- estado$items[[id]]
         if (is.null(it)) return(json(404, list(detail = "No encontramos eso.")))
-        if (metodo == "GET") return(json(200, it))
+        if (metodo == "GET") return(json(200, con_precio(it)))
         if (metodo == "DELETE") {
           estado$items[[id]] <- NULL
           return(json(200, list()))
@@ -1005,13 +1045,14 @@ iniciar_api_falsa <- function(env = parent.frame()) {
           }
           if (!is.null(d$nombre)) it$nombre <- trimws(d$nombre)
           if (!is.null(d$precio_venta)) it$precio_venta <- sprintf("%.2f", as.numeric(d$precio_venta))
+          if ("margen_objetivo" %in% names(d)) it["margen_propio_valor"] <- list(d$margen_objetivo)
           if ("categoria_id" %in% names(d)) {
             it["categoria_id"] <- list(d$categoria_id)
             it["categoria_nombre"] <- list(nombre_categoria(d$categoria_id))
           }
           it$version <- it$version + 1L
           guardar_item(it)
-          return(json(200, it))
+          return(json(200, con_precio(it)))
         }
       }
       json(404, list(detail = "No encontramos eso."))

@@ -17,6 +17,17 @@ con_url_valida <- function(destino) {
   writeLines(txt, file.path(destino, "config.yml"))
 }
 
+test_that("el paquete lleva la analítica (una sola copia de las fórmulas)", {
+  raiz <- testthat::test_path("..", "..", "..")
+  carpeta <- withr::with_dir(raiz, preparar_carpeta())
+  withr::defer(unlink(carpeta, recursive = TRUE))
+  archivos <- archivos_paquete(carpeta)
+  expect_true("analitica/meta.R" %in% archivos)
+  expect_true(all(grepl("^(app[.]R|config[.]yml|R/|www/|analitica/)", archivos)))
+  expect_equal(revisar_paquete(archivos, carpeta)[!grepl("config.yml", revisar_paquete(archivos, carpeta))],
+               character())
+})
+
 test_that("el paquete lleva solo app.R, config.yml, R/ y www/", {
   archivos <- archivos_paquete(dir_app)
   expect_true(all(c("app.R", "config.yml", "R/api_cliente.R") %in% archivos))

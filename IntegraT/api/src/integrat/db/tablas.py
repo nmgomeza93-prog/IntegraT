@@ -359,7 +359,12 @@ ops_item = sa.Table(
     sa.Column("descripcion", sa.String(500), nullable=True),
     sa.Column("se_vende", Booleano, nullable=False, server_default=sa.text("1")),
     *cols_auditoria(),
+    sa.Column("margen_objetivo", sa.Numeric(5, 4), nullable=True,
+              comment="Margen objetivo propio (nulo = el del negocio)"),
     sa.CheckConstraint("tipo_item IN ('producto','platillo')", name="tipo_item"),
+    sa.CheckConstraint("margen_objetivo IS NULL OR "
+                       "(margen_objetivo >= 0 AND margen_objetivo <= 0.9)",
+                       name="margen_objetivo"),
     sa.Index(None, "negocio_id"),
     sa.Index(None, "categoria_id"),
     comment="Productos y platillos que vende el negocio",

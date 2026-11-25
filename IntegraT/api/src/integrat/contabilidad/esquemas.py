@@ -17,6 +17,9 @@ class ResultadosOut(BaseModel):
     otros_ingresos: str
     te_queda: str            # puede ser negativo
     sin_iva: bool            # las cifras de este mes excluyen el IVA (régimen general)
+    # Para la meta del mes (la fórmula vive en R, integrat.analitica::meta_del_mes):
+    gastos_fijos: str        # del mes; si aún no hay ninguno, los del mes anterior
+    margen_objetivo: str     # del negocio, entre 0 y 1 (ej. "0.3500")
 
 
 class LineaAsientoOut(BaseModel):

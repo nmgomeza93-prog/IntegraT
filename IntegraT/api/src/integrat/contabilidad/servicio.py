@@ -5,6 +5,7 @@ negocio pasa por db.aislamiento.
 """
 
 from collections import defaultdict
+from datetime import date, timedelta
 from decimal import Decimal
 
 import sqlalchemy as sa
@@ -20,7 +21,13 @@ from integrat.contabilidad.esquemas import (
 )
 from integrat.contabilidad.motor import SEPARADO, abrir_libro
 from integrat.db import aislamiento as ais
-from integrat.db.tablas import cont_asiento, cont_asiento_linea, cont_cuenta_contable
+from integrat.db.tablas import (
+    cont_asiento,
+    cont_asiento_linea,
+    cont_cuenta_contable,
+    core_negocio,
+    ops_gasto,
+)
 from integrat.gastos.servicio import MesInvalido, _rango_del_mes
 from integrat.tiempo import hoy_del_negocio
 
@@ -56,6 +63,25 @@ def _movimientos_del_mes(ctx: ais.ContextoNegocio, inicio, siguiente) -> sa.Sele
     )
 
 
+def _gastos_fijos(con: Connection, ctx: ais.ContextoNegocio, inicio, siguiente) -> Decimal:
+    return Decimal(con.execute(
+        ais.seleccionar(ctx, ops_gasto, sa.func.coalesce(sa.func.sum(ops_gasto.c.monto), 0))
+        .where(ops_gasto.c.es_fijo.is_(True), ops_gasto.c.fecha >= inicio,
+               ops_gasto.c.fecha < siguiente)
+    ).scalar_one())
+
+
+def gastos_fijos_para_meta(con: Connection, ctx: ais.ContextoNegocio, inicio: date,
+                           siguiente: date) -> Decimal:
+    """Los gastos fijos del mes; si aún no hay ninguno, los del mes anterior (la renta del mes
+    pasado es la mejor estimación de la de este mes, y así la meta existe desde el día 1)."""
+    fijos = _gastos_fijos(con, ctx, inicio, siguiente)
+    if fijos > 0:
+        return fijos
+    anterior = (inicio - timedelta(days=1)).replace(day=1)
+    return _gastos_fijos(con, ctx, anterior, inicio)
+
+
 def resultados_del_mes(con: Connection, ctx: ais.ContextoNegocio, mes: str | None) -> ResultadosOut:
     inicio, siguiente, etiqueta = _rango_del_mes(mes, hoy_del_negocio(con, ctx))
     vendiste = otros = costo = perdido = gastos = CERO
@@ -78,11 +104,16 @@ def resultados_del_mes(con: Connection, ctx: ais.ContextoNegocio, mes: str | Non
         .where(cont_asiento.c.fecha >= inicio, cont_asiento.c.fecha < siguiente,
                cont_asiento.c.tratamiento_iva == SEPARADO).limit(1)
     ).first() is not None
+    margen_objetivo = Decimal(con.execute(
+        sa.select(core_negocio.c.margen_objetivo_defecto)
+        .where(core_negocio.c.id == ctx.negocio_id)).scalar_one())
     return ResultadosOut(
         mes=etiqueta, vendiste=_dinero(vendiste), costo_de_lo_vendido=_dinero(costo),
         se_perdio=_dinero(perdido), gastaste=_dinero(gastos), otros_ingresos=_dinero(otros),
         te_queda=_dinero(vendiste + otros - costo - perdido - gastos),
         sin_iva=con_iva_separado,
+        gastos_fijos=_dinero(gastos_fijos_para_meta(con, ctx, inicio, siguiente)),
+        margen_objetivo=f"{margen_objetivo:.4f}",
     )
 
 

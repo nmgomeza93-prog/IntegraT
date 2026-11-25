@@ -66,21 +66,84 @@ tarjeta_tu_mes <- function(r) {
   )
 }
 
+# Tarjeta "Hoy": lo vendido hoy (GET /v1/ventas) y la caja (GET /v1/caja). `abrir_id`: botón para
+# abrir la caja cuando está cerrada.
+tarjeta_hoy <- function(ventas, caja, abrir_id) {
+  resumen <- if (isTRUE(ventas$ok)) ventas$cuerpo$resumen else NULL
+  cantidad <- as.integer(resumen$cantidad %||% 0L)
+  total <- as.numeric(resumen$total %||% "0")
+  contexto <- if (is.null(resumen)) {
+    ventas$mensaje
+  } else if (cantidad == 0) {
+    "Aún no registras ventas hoy."
+  } else {
+    paste(cantidad, if (cantidad == 1) "venta" else "ventas")
+  }
+  abierta <- if (isTRUE(caja$ok)) caja$cuerpo$abierta else NULL
+  htmltools::tags$section(
+    class = "tarjeta tarjeta-numero hoy", `aria-label` = "Hoy",
+    htmltools::tags$div(
+      class = "tarjeta-numero__etiqueta", htmltools::tags$span("Vendiste hoy"),
+      if (cantidad > 0) etiqueta_estado("Vas bien", "bien") else etiqueta_estado("Empieza hoy", "neutro")
+    ),
+    htmltools::tags$p(class = "tarjeta-numero__valor", formato_dinero(total)),
+    htmltools::tags$p(class = "tarjeta-numero__contexto", contexto),
+    if (!is.null(abierta)) {
+      htmltools::tags$p(class = "hoy__caja", icono("safe"), " En la caja debería haber ",
+                        htmltools::tags$strong(formato_dinero(as.numeric(abierta$efectivo_esperado))))
+    } else if (isTRUE(caja$ok)) {
+      boton_secundario(abrir_id, "Abrir la caja", "unlock")
+    }
+  )
+}
+
+# Tarjeta "Tu meta del mes": la fórmula es de integrat.analitica (meta_del_mes); la app solo muestra.
+tarjeta_meta <- function(r) {
+  m <- meta_del_mes(r$gastos_fijos, r$vendiste, r$costo_de_lo_vendido, r$margen_objetivo)
+  if (identical(m$estado, "sin_fijos")) {
+    return(tarjeta_numero(
+      "Tu meta del mes", "—",
+      contexto = "La calculamos cuando anotes tus gastos fijos: así sabrás cuánto vender para no perder."))
+  }
+  if (identical(m$estado, "sin_margen")) {
+    return(tarjeta_numero(
+      "Tu meta del mes", "—",
+      contexto = "Con lo que te cuesta lo que vendes, no te queda margen. Revisa tus precios.",
+      estado = etiqueta_estado("Revisa precios", "alerta")))
+  }
+  porcentaje <- round(100 * m$avance)
+  htmltools::tags$section(
+    class = "tarjeta tarjeta-numero meta", `aria-label` = "Tu meta del mes",
+    htmltools::tags$div(
+      class = "tarjeta-numero__etiqueta", htmltools::tags$span("Tu meta del mes"),
+      if (m$falta == 0) etiqueta_estado("¡Lograda!", "bien")
+      else if (isTRUE(m$margen_estimado)) etiqueta_estado("Estimada", "neutro")
+    ),
+    htmltools::tags$p(class = "tarjeta-numero__valor", formato_dinero(m$meta)),
+    htmltools::tags$progress(class = "meta__barra", max = 100, value = porcentaje,
+                             `aria-label` = paste0(porcentaje, " % de la meta")),
+    htmltools::tags$p(
+      class = "tarjeta-numero__contexto",
+      if (m$falta == 0) "Ya vendiste lo necesario para cubrir tus gastos fijos."
+      else paste0("Llevas ", porcentaje, " %. Te faltan ", formato_dinero(m$falta),
+                  " para no perder este mes.")
+    ),
+    if (isTRUE(m$margen_estimado)) {
+      htmltools::tags$p(class = "tu-mes__nota",
+                        "Estimada con un margen de ", round(100 * m$margen), " %. ",
+                        "Se ajusta sola cuando tus ventas tengan costo (recetas).")
+    }
+  )
+}
+
 mod_inicio_ui <- function(id, vocab, pasos = NULL) {
   ns <- shiny::NS(id)
   htmltools::tags$div(
     class = "pila",
     shiny::uiOutput(ns("pasos")),
+    shiny::uiOutput(ns("hoy")),
+    shiny::uiOutput(ns("meta")),
     shiny::uiOutput(ns("tu_mes")),
-    tarjeta_numero(
-      "Hoy", formato_dinero(0),
-      contexto = "Aún no registras ventas hoy.",
-      estado = etiqueta_estado("Empieza hoy", "neutro")
-    ),
-    tarjeta_numero(
-      "Tu meta del mes", "—",
-      contexto = "La calculamos cuando anotes tus gastos fijos: así sabrás cuánto vender para no perder."
-    ),
     shiny::uiOutput(ns("consejo"))
   )
 }
@@ -96,6 +159,25 @@ mod_inicio_server <- function(id, s, ir_a, seccion = shiny::reactive("inicio")) 
       s$cuentas_v
       shiny::req(identical(seccion() %||% "inicio", "inicio"))
       sesion_llamar(s, "GET", "v1/resultados")
+    })
+
+    hoy <- shiny::reactive({
+      shiny::req(s$negocio)
+      s$cuentas_v
+      shiny::req(identical(seccion() %||% "inicio", "inicio"))
+      list(ventas = sesion_llamar(s, "GET", "v1/ventas"), caja = sesion_llamar(s, "GET", "v1/caja"))
+    })
+
+    output$hoy <- shiny::renderUI({
+      h <- hoy()
+      tarjeta_hoy(h$ventas, h$caja, ns("abrir_caja"))
+    })
+    shiny::observeEvent(input$abrir_caja, ir_a("caja"))
+
+    output$meta <- shiny::renderUI({
+      r <- resultados()
+      if (!r$ok) return(NULL)  # el cajero no ve las ganancias; los errores ya los dice "Tu mes"
+      tarjeta_meta(r$cuerpo)
     })
 
     output$tu_mes <- shiny::renderUI({

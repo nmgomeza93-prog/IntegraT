@@ -43,6 +43,41 @@ texto_margen <- function(r) {
          if (!is.null(r$margen_porcentaje)) paste0(" (", r$margen_porcentaje, " %)"))
 }
 
+# Marca del precio en la lista del catálogo (el aviso lo calcula la API: integrat.precios).
+marca_precio <- function(aviso) {
+  switch(aviso %||% "",
+    pierde = htmltools::tags$span(class = "marca-precio marca-precio--pierde", "Pierdes"),
+    bajo = htmltools::tags$span(class = "marca-precio marca-precio--bajo", "Margen bajo"),
+    NULL
+  )
+}
+
+# Tarjeta "Precio sugerido" de la ficha de receta. `usar_id` y `margen_id`: botones.
+tarjeta_precio_sugerido <- function(r, usar_id, margen_id) {
+  if (is.null(r$precio_sugerido)) return(NULL)
+  sugerido <- as.numeric(r$precio_sugerido)
+  actual <- as.numeric(r$precio_venta %||% "0")
+  estado <- switch(r$aviso_precio %||% "",
+    pierde = etiqueta_estado("Pierdes dinero", "alerta"),
+    bajo = etiqueta_estado("Ganas poco", "atencion"),
+    ok = etiqueta_estado("Buen precio", "bien"),
+    NULL)
+  contexto <- paste0("Para ganar tu ", r$margen_objetivo_porcentaje, " %",
+                     if (isTRUE(r$margen_propio)) " (margen propio de este)" else "",
+                     ". Lo vendes en ", formato_dinero(actual), ".")
+  htmltools::tags$section(
+    class = "tarjeta tarjeta-numero precio-sugerido", `aria-label` = "Precio sugerido",
+    htmltools::tags$div(class = "tarjeta-numero__etiqueta",
+                        htmltools::tags$span("Precio sugerido"), estado),
+    htmltools::tags$p(class = "tarjeta-numero__valor", formato_dinero(sugerido)),
+    htmltools::tags$p(class = "tarjeta-numero__contexto", contexto),
+    if (!identical(r$aviso_precio, "ok") && abs(sugerido - actual) >= 0.005) {
+      boton_primario(usar_id, paste("Usar", formato_dinero(sugerido)), "check-lg")
+    },
+    enlace_accion(margen_id, "Cambiar el margen", "sliders")
+  )
+}
+
 mod_productos_ui <- function(id, vocab) {
   ns <- shiny::NS(id)
   htmltools::tags$div(class = "catalogo", shiny::uiOutput(ns("contenido")))
@@ -66,6 +101,8 @@ mod_productos_server <- function(id, s, ir_a) {
     mercaderia <- shiny::reactiveVal(NULL)     # NULL = no se sabe; si no, lo que dice la API
     receta <- shiny::reactiveVal(NULL)
     datos_receta <- shiny::reactiveVal(NULL)   # list(insumos, unidades) para armar la receta
+    margen_abierto <- shiny::reactiveVal(FALSE)  # el formulario del margen propio
+    error_margen <- shiny::reactiveVal(NULL)
 
     vocab <- shiny::reactive(vocab_negocio(shiny::req(s$negocio)))
 
@@ -172,7 +209,9 @@ mod_productos_server <- function(id, s, ir_a) {
           htmltools::tags$ul(
             class = "lista-opciones",
             lapply(g$items, function(i) {
-              item_lista("tag", i$nombre, formato_dinero(as.numeric(i$precio_venta)),
+              item_lista("tag", i$nombre,
+                         htmltools::tagList(marca_precio(i$aviso_precio),
+                                            formato_dinero(as.numeric(i$precio_venta))),
                          `data-elige-input` = ns("abrir"), `data-elige-valor` = i$id)
             })
           )
@@ -284,6 +323,9 @@ mod_productos_server <- function(id, s, ir_a) {
               " y te diremos cuánto te cuesta y cuánto te queda."
             ))
           },
+          if (isTRUE(r$tiene_receta)) tarjeta_precio_sugerido(r, ns("usar_sugerido"),
+                                                               ns("abrir_margen")),
+          if (margen_abierto()) ui_margen(r),
           if (isTRUE(r$tiene_receta) && !isTRUE(r$costo_completo)) {
             htmltools::tags$p(class = "entrada__texto", paste0(
               "A algún insumo todavía no le anotas lo que cuesta, así que el costo real es mayor. ",
@@ -373,6 +415,40 @@ mod_productos_server <- function(id, s, ir_a) {
       receta(r$cuerpo)
       sesion_actualizar_pasos(s)  # la primera receta marca el paso del checklist
       invisible(TRUE)
+    }
+
+    # Margen propio de este ítem (o volver al del negocio).
+    ui_margen <- function(r) {
+      htmltools::tags$section(
+        class = "tarjeta",
+        htmltools::tags$h2(class = "hoja__titulo", "¿Cuánto quieres ganar con este?"),
+        campo_texto(ns("margen_pct"), "Margen (%)", valor = r$margen_objetivo_porcentaje,
+                    placeholder = "Ejemplo: 40", autocompletar = "off", modo = "numeric"),
+        mensaje_error(error_margen()),
+        htmltools::tags$div(
+          class = "pila",
+          boton_primario(ns("guardar_margen"), "Guardar margen", "check-lg"),
+          if (isTRUE(r$margen_propio)) {
+            boton_secundario(ns("margen_negocio"), "Usar el de mi negocio", "arrow-counterclockwise")
+          },
+          enlace_accion(ns("cerrar_margen"), "Mejor no", "x-lg")
+        )
+      )
+    }
+
+    # Cambia el ítem (precio o margen) con su versión y recarga la ficha y la lista.
+    cambiar_item <- function(cambios, aviso) {
+      it <- editando()
+      r <- sesion_llamar(s, "PATCH", paste0("v1/items/", it$id), c(list(version = it$version), cambios))
+      if (!r$ok) {
+        error(r$mensaje)
+        return(FALSE)
+      }
+      editando(r$cuerpo)
+      refresco(refresco() + 1L)
+      cargar_receta()
+      shiny::showNotification(aviso, duration = 4, closeButton = FALSE, id = "catalogo-aviso")
+      TRUE
     }
 
     ui_archivar <- function(v, it) {
@@ -519,10 +595,38 @@ mod_productos_server <- function(id, s, ir_a) {
       receta(NULL)
       datos_receta(NULL)
       error(NULL)
+      margen_abierto(FALSE)
       cargar_receta()
       ir_a_vista("receta")
     })
     shiny::observeEvent(input$reintentar_receta, cargar_receta())
+
+    shiny::observeEvent(input$usar_sugerido, {
+      r <- receta()
+      if (vista() != "receta" || is.null(r$precio_sugerido)) return()
+      cambiar_item(list(precio_venta = r$precio_sugerido),
+                   paste("Ahora lo vendes en", formato_dinero(as.numeric(r$precio_sugerido))))
+    })
+    shiny::observeEvent(input$abrir_margen, {
+      error_margen(NULL)
+      margen_abierto(TRUE)
+    })
+    shiny::observeEvent(input$cerrar_margen, margen_abierto(FALSE))
+    shiny::observeEvent(input$guardar_margen, {
+      pct <- suppressWarnings(as.numeric(gsub("[%[:space:]]", "", input$margen_pct %||% "")))
+      if (is.na(pct) || pct < 0 || pct > 90) {
+        return(error_margen("Escribe un margen entre 0 y 90, por ejemplo 40."))
+      }
+      if (cambiar_item(list(margen_objetivo = sprintf("%.4f", pct / 100)),
+                       paste0("Margen de este: ", pct, " %"))) {
+        margen_abierto(FALSE)
+      }
+    })
+    shiny::observeEvent(input$margen_negocio, {
+      if (cambiar_item(list(margen_objetivo = NA), "Vuelve a usar el margen de tu negocio")) {
+        margen_abierto(FALSE)
+      }
+    })
     shiny::observeEvent(input$atras_receta, {
       error(NULL)
       ir_a_vista("editar")

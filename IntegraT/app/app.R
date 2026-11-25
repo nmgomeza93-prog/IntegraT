@@ -102,6 +102,7 @@ server <- function(input, output, session) {
   mod_impuestos_server("impuestos", s, ir_a)
   mod_caja_server("caja", s, ir_a, seccion = reactive(input$seccion))
   mod_dueno_server("dueno", s, ir_a)
+  mod_margen_server("margen", s, ir_a)
   mod_mas_server("mas", salir, ir_a)
 }
 

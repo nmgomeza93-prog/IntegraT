@@ -12,6 +12,8 @@ from decimal import ROUND_HALF_UP, Decimal
 import sqlalchemy as sa
 from sqlalchemy.engine import Connection
 
+from integrat import precios
+from integrat.contabilidad.motor import separar_iva, tratamiento_iva
 from integrat.db import aislamiento as ais
 from integrat.db.tablas import (
     cat_unidad_medida,
@@ -112,15 +114,24 @@ def obtener_receta(con: Connection, ctx: ais.ContextoNegocio, item_id: uuid.UUID
     precio = _precio(con, ctx, item_id)
     margen = porcentaje = None
     if lineas and precio is not None:
-        margen = (precio - total).quantize(CENTAVOS, ROUND_HALF_UP)
-        if precio > 0:
-            porcentaje = int((margen * 100 / precio).quantize(Decimal("1"), ROUND_HALF_UP))
+        # El margen se mide sobre el precio SIN IVA: el IVA cobrado no es del negocio.
+        neto, _ = separar_iva(Decimal(precio), tratamiento_iva(con, ctx))
+        margen = (neto - total).quantize(CENTAVOS, ROUND_HALF_UP)
+        if neto > 0:
+            porcentaje = int((margen * 100 / neto).quantize(Decimal("1"), ROUND_HALF_UP))
+    info = precios.para_items(con, ctx, [item_id]).get(item_id)
     return RecetaOut(
         item_id=item.id, item_nombre=item.nombre, tiene_receta=bool(lineas), lineas=lineas,
         costo_total=f"{total:.2f}",
         costo_completo=not any(linea.sin_costo and not linea.archivado for linea in lineas),
         precio_venta=None if precio is None else f"{Decimal(precio):.2f}",
         margen=None if margen is None else f"{margen:.2f}", margen_porcentaje=porcentaje,
+        precio_sugerido=None if info is None or info.precio_sugerido is None
+        else f"{info.precio_sugerido:.2f}",
+        aviso_precio=None if info is None else info.aviso,
+        margen_objetivo_porcentaje=35 if info is None
+        else int((info.margen_objetivo * 100).quantize(Decimal("1"), ROUND_HALF_UP)),
+        margen_propio=False if info is None else info.margen_propio,
     )
 
 
