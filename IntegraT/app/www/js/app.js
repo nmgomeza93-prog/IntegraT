@@ -37,7 +37,7 @@
 
   // --- Navegación inferior: marca la sección activa ---
   // Secciones que no tienen botón propio en la barra se muestran bajo otra (Gastos vive en "Más").
-  var BAJO_BOTON = { gastos: "mas", inventario: "mas", compras: "mas", impuestos: "mas", caja: "mas", dueno: "mas", margen: "mas" };
+  var BAJO_BOTON = { gastos: "mas", inventario: "mas", compras: "mas", impuestos: "mas", caja: "mas", dueno: "mas", margen: "mas", importaciones: "mas" };
   function marcarSeccion(destino) {
     destino = BAJO_BOTON[destino] || destino;
     document.querySelectorAll(".nav-inferior__boton[data-destino]").forEach(function (b) {

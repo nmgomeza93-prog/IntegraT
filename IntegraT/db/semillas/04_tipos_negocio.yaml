@@ -130,7 +130,7 @@
           - nombre: Ropa
             icono: bag
             atributos: [Talla, Color]
-            palabras_clave: [camisa, camiseta, blusa, vestido, pantalon, pantalón, short, falda, sueter, suéter, chaqueta, abrigo, top, conjunto, leggings, jeans, sudadera]
+            palabras_clave: [camisa, camiseta, blusa, vestido, pantalon, pantalón, short, falda, sueter, suéter, chaqueta, abrigo, top, leggings, jeans, sudadera]
           - nombre: Calzado
             icono: bootstrap
             atributos: [Número, Color]

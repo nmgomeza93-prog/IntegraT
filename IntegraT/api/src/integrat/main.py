@@ -15,6 +15,7 @@ from integrat.compras.router import router as router_compras
 from integrat.config import config_app
 from integrat.contabilidad.router import router as router_contabilidad
 from integrat.gastos.router import router as router_gastos
+from integrat.importaciones.router import router as router_importaciones
 from integrat.insumos.router import router as router_insumos
 from integrat.items.router import router as router_items
 from integrat.logs import configurar_logs
@@ -55,7 +56,7 @@ def crear_app() -> FastAPI:
     for router in (router_salud, router_auth, router_catalogos, router_negocios, router_variantes,
                    router_items,
                    router_ventas, router_gastos, router_insumos, router_compras,
-                   router_contabilidad, router_caja):
+                   router_contabilidad, router_caja, router_importaciones):
         app.include_router(router, prefix=PREFIJO)
     return app
 

@@ -64,6 +64,23 @@ api_llamar <- function(metodo, ruta, cuerpo = NULL, token = NULL, tiempo_max = 1
        mensaje = if (ok) NULL else mensaje_error_api(estado, cuerpo_resp))
 }
 
+# Sube un archivo (multipart, campo `campo`) a la API. Mismo resultado que api_llamar().
+api_subir <- function(ruta, archivo, nombre, token = NULL, campo = "archivo", tiempo_max = 30) {
+  partes <- stats::setNames(list(curl::form_file(archivo, "application/octet-stream", nombre)), campo)
+  peticion <- httr2::req_method(api_peticion(ruta, tiempo_max), "POST")
+  if (!is.null(token)) peticion <- httr2::req_auth_bearer_token(peticion, token)
+  peticion <- do.call(httr2::req_body_multipart, c(list(peticion), partes))
+  resp <- tryCatch(httr2::req_perform(peticion), error = function(e) NULL)
+  if (is.null(resp)) {
+    return(list(ok = FALSE, estado = 0L, cuerpo = NULL, mensaje = MENSAJE_SIN_CONEXION))
+  }
+  estado <- httr2::resp_status(resp)
+  cuerpo <- tryCatch(httr2::resp_body_json(resp), error = function(e) NULL)
+  ok <- estado >= 200 && estado < 300
+  list(ok = ok, estado = estado, cuerpo = cuerpo,
+       mensaje = if (ok) NULL else mensaje_error_api(estado, cuerpo))
+}
+
 # Devuelve list(api = TRUE/FALSE, bd = TRUE/FALSE). Nunca lanza error.
 api_salud <- function(tiempo_max = 3) {
   resp <- tryCatch(httr2::req_perform(api_peticion("v1/salud", tiempo_max)), error = function(e) NULL)

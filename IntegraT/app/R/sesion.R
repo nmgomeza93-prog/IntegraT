@@ -73,6 +73,22 @@ sesion_llamar <- function(s, metodo, ruta, cuerpo = NULL, cabeceras = NULL, cons
   resultado
 }
 
+# Sube un archivo con el token de la sesión (lo renueva una vez si venció, como sesion_llamar).
+sesion_subir <- function(s, ruta, archivo, nombre) {
+  resultado <- api_subir(ruta, archivo, nombre, token = shiny::isolate(s$acceso))
+  refresco <- shiny::isolate(s$refresco)
+  if (resultado$estado == 401L && !is.null(refresco)) {
+    renovada <- api_llamar("POST", "v1/auth/refrescar", list(refresh_token = refresco))
+    if (renovada$ok) {
+      sesion_abrir(s, renovada$cuerpo)
+      resultado <- api_subir(ruta, archivo, nombre, token = renovada$cuerpo$access_token)
+    } else if (renovada$estado == 401L) {
+      sesion_cerrar(s)
+    }
+  }
+  resultado
+}
+
 # Pone al día el checklist del Inicio (los pasos se marcan solos según lo que ya hizo la persona).
 sesion_actualizar_pasos <- function(s) {
   negocio_id <- shiny::isolate(s$negocio_id)

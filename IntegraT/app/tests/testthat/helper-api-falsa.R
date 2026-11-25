@@ -106,6 +106,36 @@ iniciar_api_falsa <- function(env = parent.frame()) {
       list(id = "at-2", nombre = "Color",
            valores = lapply(c("Negro", "Rosa"), function(v) list(id = paste0("va-", v), valor = v))))
     estado$variantes_creadas <- 0L
+    estado$importaciones <- list()
+    estado$claves_importacion <- list()
+    # Vista previa fija (la API real lee el archivo): 2 productos, uno con 2 tallas.
+    previa_falsa <- list(
+      encabezado = list(plataforma = "shein", numero_factura = "INVPRUEBA", numero_orden = "ORD-1",
+                        fecha_factura = "2026-11-03", moneda_codigo = "MXN", moneda_conocida = TRUE,
+                        tipo_cambio = NULL, total_factura = "519.00", garantia_envio = "19.00",
+                        costo_importacion = "100.00", otros_cobros = "0.00"),
+      cuadre = list(lineas = "400.00", cargos = "119.00", total_calculado = "519.00",
+                    total_factura = "519.00", diferencia = "0.00", cuadra = TRUE),
+      productos = list(
+        list(nombre = "SilkySpell Conjunto de pijama", categoria = "Ropa de dormir", item_id = NULL,
+             existente = FALSE,
+             lineas = list(list(fila = 3L, codigo = "si100", descripcion = "Pijama con encaje",
+                                atributos = list(Talla = "M", Color = "Negro"), cantidad = 1L,
+                                precio_unitario = "100.0000", item_variante_id = NULL))),
+        list(nombre = "Dream Adore Conjunto", categoria = "Ropa de dormir", item_id = NULL,
+             existente = FALSE,
+             lineas = list(
+               list(fila = 4L, codigo = "si200", descripcion = "Conjunto de casa",
+                    atributos = list(Talla = "S", Color = "Rosa"), cantidad = 1L,
+                    precio_unitario = "150.0000", item_variante_id = NULL),
+               list(fila = 5L, codigo = "si200", descripcion = "Conjunto de casa",
+                    atributos = list(Talla = "M", Color = "Rosa"), cantidad = 1L,
+                    precio_unitario = "150.0000", item_variante_id = NULL)))),
+      unidades = 3L, avisos = list())
+    importacion_out <- function(i, con_lineas = TRUE) {
+      if (!con_lineas) i$lineas <- list()
+      i
+    }
     estado$caja <- NULL          # la sesión abierta
     estado$cierres <- list()
     estado$cierres_hechos <- 0L
@@ -339,6 +369,11 @@ iniciar_api_falsa <- function(env = parent.frame()) {
                               proveedores = length(estado$proveedores),
                               regimen = estado$regimen,
                               margen = estado$margen,
+                              importaciones = length(estado$importaciones),
+                              importaciones_recibidas = sum(vapply(estado$importaciones,
+                                function(i) i$estado %in% c("recibida", "recibida_parcial"), NA)),
+                              importaciones_parciales = sum(vapply(estado$importaciones,
+                                function(i) identical(i$estado, "recibida_parcial"), NA)),
                               cierres = estado$cierres_hechos,
                               caja_abierta = !is.null(estado$caja),
                               dueno = length(estado$dueno),
@@ -435,6 +470,94 @@ iniciar_api_falsa <- function(env = parent.frame()) {
           return(json(503, list(detail = "El servicio no está listo. Intenta más tarde.")))
         }
         return(json(201, n))
+      }
+      if (ruta == "/v1/categorias/sugeridas" && metodo == "GET") {
+        return(json(200, list(list(nombre = "Ropa de dormir", icono = "moon-stars",
+                                   atributos = list("Talla", "Color"), palabras_clave = list("pijama")))))
+      }
+      if (ruta == "/v1/importaciones/vista-previa" && metodo == "POST") {
+        crudo <- req$rook.input$read()
+        cabeza <- rawToChar(crudo[seq_len(min(400L, length(crudo)))][crudo[seq_len(min(400L, length(crudo)))] != as.raw(0)])
+        if (grepl("filename=\"[^\"]*\\.pdf\"", cabeza)) {
+          return(json(422, list(detail = "Sube la plantilla en Excel (.xlsx) o CSV.")))
+        }
+        return(json(200, previa_falsa))
+      }
+      if (ruta == "/v1/importaciones" && metodo == "POST") {
+        d <- leer(req)
+        clave <- req$HTTP_IDEMPOTENCY_KEY %||% NULL
+        if (!is.null(clave) && !is.null(estado$claves_importacion[[clave]])) {
+          return(json(201, estado$claves_importacion[[clave]]))
+        }
+        if (is.null(d$cobro_q)) return(json(422, list(detail = "Dinos cuánto te cobró la tarjeta en quetzales.")))
+        id <- paste0("imp-", length(estado$importaciones) + 1L)
+        k <- 0L
+        lineas <- list()
+        for (prod in d$productos) for (l in prod$lineas) {
+          k <- k + 1L
+          valores <- paste(unlist(l$atributos), collapse = " \u00b7 ")
+          lineas[[k]] <- list(id = paste0(id, "-l", k),
+                              nombre = if (nzchar(valores)) paste(prod$nombre, "\u00b7", valores) else prod$nombre,
+                              codigo = l$codigo, atributos = l$atributos, item_id = NULL,
+                              item_variante_id = NULL, cantidad = l$cantidad,
+                              precio_unitario = sprintf("%.2f", as.numeric(l$precio_unitario)),
+                              costo_pedido_q = "50.00", cantidad_recibida = NULL, courier_q = NULL,
+                              costo_unitario_q = NULL, precio_sugerido = NULL)
+        }
+        imp <- list(id = id, plataforma = d$plataforma, numero_factura = d$numero_factura,
+                    numero_orden = d$numero_orden, fecha_factura = d$fecha_factura,
+                    moneda_codigo = d$moneda_codigo, total_factura = "519.00",
+                    tipo_cambio = sprintf("%.6f", as.numeric(d$cobro_q) / 519),
+                    total_q = sprintf("%.2f", as.numeric(d$cobro_q)), medio_pago = d$medio_pago,
+                    estado = "en_camino", creada_en = "2026-11-25T10:00:00Z", recibida_en = NULL,
+                    guia = NULL, courier_q = NULL, envio_local_q = NULL, nota = NULL,
+                    motivo_anulacion = NULL, unidades = sum(vapply(lineas, function(l) l$cantidad, 0L)),
+                    dias_en_camino = 2L, lineas = lineas, productos_nombres = vapply(d$productos, function(x) x$nombre, ""))
+        estado$importaciones[[id]] <- imp
+        if (!is.null(clave)) estado$claves_importacion[[clave]] <- imp
+        return(json(201, imp))
+      }
+      if (ruta == "/v1/importaciones" && metodo == "GET") {
+        todas <- rev(unname(estado$importaciones))
+        en_camino <- Filter(function(i) identical(i$estado, "en_camino"), todas)
+        recibidas <- Filter(function(i) i$estado %in% c("recibida", "recibida_parcial"), todas)
+        return(json(200, list(en_camino = lapply(en_camino, importacion_out, FALSE),
+                              recibidas = lapply(recibidas, importacion_out, FALSE))))
+      }
+      if (grepl("^/v1/importaciones/[^/]+/recibir$", ruta) && metodo == "POST") {
+        id <- sub("/recibir$", "", sub("^/v1/importaciones/", "", ruta))
+        imp <- estado$importaciones[[id]]
+        if (is.null(imp)) return(json(404, list(detail = "No encontramos esa importación.")))
+        if (!identical(imp$estado, "en_camino")) return(json(409, list(detail = "Esta importación ya no está en camino.")))
+        d <- leer(req)
+        faltan <- vapply(d$lineas %||% list(), function(l) l$linea_id, "")
+        imp$lineas <- lapply(imp$lineas, function(l) {
+          r <- Filter(function(x) identical(x$linea_id, l$id), d$lineas %||% list())
+          l$cantidad_recibida <- if (length(r)) r[[1]]$cantidad_recibida else l$cantidad
+          l$courier_q <- "10.00"
+          l$costo_unitario_q <- "60.00000000"
+          l$precio_sugerido <- "92.50"
+          l
+        })
+        imp$estado <- if (length(faltan)) "recibida_parcial" else "recibida"
+        imp$recibida_en <- "2026-11-27T10:00:00Z"
+        imp$guia <- d$guia
+        imp$courier_q <- sprintf("%.2f", as.numeric(d$courier_q %||% 0))
+        estado$importaciones[[id]] <- imp
+        return(json(200, imp))
+      }
+      if (grepl("^/v1/importaciones/[^/]+/anular$", ruta) && metodo == "POST") {
+        id <- sub("/anular$", "", sub("^/v1/importaciones/", "", ruta))
+        imp <- estado$importaciones[[id]]
+        if (is.null(imp)) return(json(404, list(detail = "No encontramos esa importación.")))
+        imp$estado <- "anulada"
+        estado$importaciones[[id]] <- imp
+        return(json(200, imp))
+      }
+      if (startsWith(ruta, "/v1/importaciones/") && metodo == "GET") {
+        imp <- estado$importaciones[[sub("^/v1/importaciones/", "", ruta)]]
+        if (is.null(imp)) return(json(404, list(detail = "No encontramos esa importación.")))
+        return(json(200, imp))
       }
       if (ruta == "/v1/atributos" && metodo == "GET") {
         return(json(200, estado$atributos))

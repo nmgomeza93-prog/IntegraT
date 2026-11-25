@@ -323,9 +323,9 @@
 .vender .tarjeta .entrada__texto { margin: 0 0 var(--esp-3); }
 
 /* Gastos: selector de mes y resumen por categoría */
-.gastos, .inventario, .compras, .caja, .dueno, .margen { display: flex; flex-direction: column; gap: var(--esp-3); }
+.gastos, .inventario, .compras, .caja, .dueno, .margen, .importaciones { display: flex; flex-direction: column; gap: var(--esp-3); }
 .caja .boton-primario, .caja .boton-secundario, .dueno .boton-primario, .dueno .boton-secundario,
-.margen .boton-primario,
+.margen .boton-primario, .importaciones .boton-primario, .importaciones .boton-secundario,
 .gastos .boton-primario, .gastos .boton-secundario,
 .inventario .boton-primario, .inventario .boton-secundario,
 .compras .boton-primario, .compras .boton-secundario { width: 100%; }
@@ -465,3 +465,8 @@
 }
 .opcion-variante__nombre { font-weight: 600; }
 .opcion-variante__precio { color: var(--color-texto-2); font-size: var(--texto-pequeno); }
+
+/* Importaciones: productos de la plantilla en la revisión */
+.producto-importado { display: grid; gap: var(--esp-2); }
+.lineas-importadas { margin: 0; padding-left: var(--esp-4); color: var(--color-texto-2); font-size: var(--texto-pequeno); }
+.subir-plantilla .btn { min-height: var(--toque-minimo); }

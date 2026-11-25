@@ -3,6 +3,9 @@
   filas:
     - {codigo: GTQ, nombre: Quetzal, simbolo: "Q", decimales: 2}
     - {codigo: USD, nombre: Dólar estadounidense, simbolo: "US$", decimales: 2}
+    - {codigo: MXN, nombre: Peso mexicano, simbolo: "MX$", decimales: 2}
+    - {codigo: EUR, nombre: Euro, simbolo: "€", decimales: 2}
+    - {codigo: CNY, nombre: Yuan chino, simbolo: "CN¥", decimales: 2}
 
 - tabla: cat_pais
   filas:

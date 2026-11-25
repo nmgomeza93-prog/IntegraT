@@ -37,6 +37,7 @@
     - {codigo: GASTO_VARIOS,            naturaleza: deudora,   descripcion_simple: Otros gastos}
     - {codigo: IMPUESTO_PEQ_CONTRIBUYENTE, naturaleza: deudora, descripcion_simple: Impuesto sobre ventas}
     - {codigo: DIFERENCIA_CAJA,         naturaleza: deudora,   descripcion_simple: Faltantes de caja}
+    - {codigo: INVENTARIO_TRANSITO,     naturaleza: deudora,   descripcion_simple: Mercadería en camino}
 
 # Cada cuenta: codigo, nombre, nombre_simple, tipo, naturaleza, padre (código) y rol (opcional).
 # Solo las cuentas sin hijas aceptan movimientos. Las dos plantillas solo difieren en la cuenta
@@ -45,7 +46,7 @@
   filas:
     - pais_codigo: GT
       tipo_negocio_codigo: ventas_en_linea
-      version: 2  # v2: + 6191 Faltantes de caja
+      version: 3  # v2: + 6191 Faltantes de caja; v3: + 1109 Mercadería en camino
       contenido:
         cuentas:
           - {codigo: "1",    nombre: ACTIVO,                              tipo: activo,     naturaleza: deudora}
@@ -56,6 +57,7 @@
           - {codigo: "1105", nombre: Clientes,                            tipo: activo,     naturaleza: deudora,   padre: "11", rol: POR_COBRAR_CLIENTES,   nombre_simple: Te deben}
           - {codigo: "1107", nombre: Inventario de mercadería,            tipo: activo,     naturaleza: deudora,   padre: "11", rol: INVENTARIO_MERCADERIA, nombre_simple: Lo que tienes para vender}
           - {codigo: "1108", nombre: Inventario de insumos,               tipo: activo,     naturaleza: deudora,   padre: "11", rol: INVENTARIO_INSUMOS,    nombre_simple: Ingredientes e insumos}
+          - {codigo: "1109", nombre: Mercadería en tránsito,              tipo: activo,     naturaleza: deudora,   padre: "11", rol: INVENTARIO_TRANSITO,   nombre_simple: Mercadería en camino}
           - {codigo: "1110", nombre: IVA por cobrar (crédito fiscal),     tipo: activo,     naturaleza: deudora,   padre: "11", rol: IVA_CREDITO,           nombre_simple: IVA de tus compras}
           - {codigo: "2",    nombre: PASIVO,                              tipo: pasivo,     naturaleza: acreedora}
           - {codigo: "21",   nombre: Pasivo corriente,                    tipo: pasivo,     naturaleza: acreedora, padre: "2"}
@@ -89,7 +91,7 @@
           - {codigo: "6201", nombre: Impuesto de pequeño contribuyente,   tipo: gasto,      naturaleza: deudora,   padre: "6", rol: IMPUESTO_PEQ_CONTRIBUYENTE, nombre_simple: Impuesto sobre ventas}
     - pais_codigo: GT
       tipo_negocio_codigo: restaurante
-      version: 2  # v2: + 6191 Faltantes de caja
+      version: 3  # v2: + 6191 Faltantes de caja; v3: + 1109 Mercadería en camino
       contenido:
         cuentas:
           - {codigo: "1",    nombre: ACTIVO,                              tipo: activo,     naturaleza: deudora}
@@ -100,6 +102,7 @@
           - {codigo: "1105", nombre: Clientes,                            tipo: activo,     naturaleza: deudora,   padre: "11", rol: POR_COBRAR_CLIENTES,   nombre_simple: Te deben}
           - {codigo: "1107", nombre: Inventario de mercadería,            tipo: activo,     naturaleza: deudora,   padre: "11", rol: INVENTARIO_MERCADERIA, nombre_simple: Lo que tienes para vender}
           - {codigo: "1108", nombre: Inventario de insumos (cocina),      tipo: activo,     naturaleza: deudora,   padre: "11", rol: INVENTARIO_INSUMOS,    nombre_simple: Ingredientes}
+          - {codigo: "1109", nombre: Mercadería en tránsito,              tipo: activo,     naturaleza: deudora,   padre: "11", rol: INVENTARIO_TRANSITO,   nombre_simple: Mercadería en camino}
           - {codigo: "1110", nombre: IVA por cobrar (crédito fiscal),     tipo: activo,     naturaleza: deudora,   padre: "11", rol: IVA_CREDITO,           nombre_simple: IVA de tus compras}
           - {codigo: "2",    nombre: PASIVO,                              tipo: pasivo,     naturaleza: acreedora}
           - {codigo: "21",   nombre: Pasivo corriente,                    tipo: pasivo,     naturaleza: acreedora, padre: "2"}
@@ -299,3 +302,25 @@
       lineas:
         - {lado: debe,  rol: CAJA,            importe: valor}
         - {lado: haber, rol: OTROS_INGRESOS,  importe: valor}
+    - codigo: GT_IMPORTACION_PEDIDO_V1
+      pais_codigo: GT
+      tipo_evento: IMPORTACION_PEDIDO
+      tratamiento_iva: sin_separar
+      version: 1
+      vigente_desde: 2026-01-01
+      descripcion_simple: Pediste mercadería del extranjero (viene en camino)
+      lineas:
+        - {lado: debe,  rol: INVENTARIO_TRANSITO, importe: total}
+        - {lado: haber, rol: "@pago",             importe: total}
+    - codigo: GT_IMPORTACION_RECEPCION_V1
+      pais_codigo: GT
+      tipo_evento: IMPORTACION_RECEPCION
+      tratamiento_iva: sin_separar
+      version: 1
+      vigente_desde: 2026-01-01
+      descripcion_simple: Llegó la importación (courier e impuestos como costo) [verificar]
+      lineas:
+        - {lado: debe,  rol: INVENTARIO_MERCADERIA, importe: inventario}
+        - {lado: debe,  rol: MERMA,                 importe: perdido}
+        - {lado: haber, rol: INVENTARIO_TRANSITO,   importe: transito}
+        - {lado: haber, rol: "@pago",               importe: courier}
