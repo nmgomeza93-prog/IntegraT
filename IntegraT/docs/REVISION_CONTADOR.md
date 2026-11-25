@@ -353,6 +353,7 @@
 | Código Tributario, Decreto 6-91 | Prescripción, conservación de documentos | [verificar] |
 | Código de Comercio, Decreto 2-70 | Obligación de contabilidad y libros, conservación | [verificar] |
 | Régimen de Factura Electrónica en Línea (FEL), acuerdos de Directorio de la SAT | Documentos tributarios electrónicos (ver `PLAN_FEL.md`) | [verificar los acuerdos y el esquema vigente] |
+| Reglas del NIT (dígito verificador módulo 11, "K" = 10) y del CUI del DPI (13 dígitos: 8 + verificador + departamento + municipio) | Validar el NIT o CUI del cliente (`api/src/integrat/clientes/validaciones.py`) | [verificar los algoritmos y la tabla de municipios] |
 | NIIF para las PYMES (IASB), Sección 13 Inventarios | Costo de inventarios, costeo promedio | Marco contable de referencia [verificar la aplicabilidad local] |
 
 **Nota final:** IntegraT **no presenta declaraciones** en el MVP. Prepara la información para que el usuario o su contador las presenten. El contenido de este documento **no constituye asesoría legal**; requiere la validación profesional que aquí se solicita.

@@ -97,3 +97,15 @@
 - App: "Quedan N · por agotarse" en Vender, aviso "Te queda poco de…" al cobrar, tarjeta "Por agotarse" en el
   Inicio (con "Ver mi inventario") y el mínimo en Más → "Si no hay inventario".
 - Sigue: C1 y C2 (clientes).
+
+## 7. Estado (2026-11-25): C1 hecho
+- Migración `0021`: `ops_cliente` (datos fijos y `datos` JSON con los campos propios), `ops_campo_cliente`
+  (texto, número, fecha o sí/no; máximo 10) y `ops_venta.cliente_id` (nulo = Consumidor final).
+- `integrat/clientes/`: `validaciones.py` (teléfono normalizado a `+502…`, correo, NIT módulo 11 con K y CUI
+  con departamento y municipio, marcados [verificar]); rutas `GET/POST /v1/clientes` (búsqueda por nombre,
+  teléfono o NIT), `GET/PATCH/DELETE /v1/clientes/{id}` (la ficha trae lo que ha comprado) y
+  `GET/PUT /v1/clientes/campos`. Duplicado por teléfono o NIT/CUI: 409 con el nombre; `aunque_se_repita`
+  guarda igual. El cajero busca, crea y corrige; archivar y los campos son del dueño o el administrador.
+- Ventas: `cliente_id` opcional al cobrar; `cliente_id` y `cliente_nombre` en cada venta (también si el
+  cliente se archivó). Pruebas en `api/tests/test_clientes.py`.
+- Sigue: C2 (clientes en la app).

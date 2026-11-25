@@ -15,6 +15,7 @@ import sqlalchemy as sa
 from sqlalchemy.engine import Connection, Engine
 
 from integrat import existencias
+from integrat.clientes import servicio as clientes
 from integrat.contabilidad import eventos as contabilidad
 from integrat.db import aislamiento as ais
 from integrat.db.tablas import (
@@ -54,6 +55,10 @@ class ItemNoVendible(Exception):
 
 class FaltaVariante(Exception):
     """El producto tiene variantes (talla, color…) y la línea no dice cuál."""
+
+
+class ClienteInvalido(Exception):
+    """El cliente no existe en este negocio o está archivado."""
 
 
 class YaAnulada(Exception):
@@ -137,6 +142,8 @@ def _siguiente_numero(con: Connection, ctx: ais.ContextoNegocio) -> int:
 
 
 def crear_venta(con: Connection, ctx: ais.ContextoNegocio, datos: VentaIn) -> VentaOut:
+    if datos.cliente_id is not None and not clientes.existe(con, ctx, datos.cliente_id):
+        raise ClienteInvalido
     pedidas = _cantidades_por_item(datos)
     por_item = _cargar_variantes(con, ctx, list({i for i, _ in pedidas}))
 
@@ -167,6 +174,7 @@ def crear_venta(con: Connection, ctx: ais.ContextoNegocio, datos: VentaIn) -> Ve
     con.execute(ais.insertar(ctx, ops_venta, {
         "id": venta_id, "numero": _siguiente_numero(con, ctx), "fecha_hora": ahora_utc(),
         "estado": "pagada", "total": total, "moneda_codigo": moneda,
+        "cliente_id": datos.cliente_id,
     }))
     for linea in lineas:
         con.execute(ais.insertar(ctx, ops_venta_linea, {
@@ -186,6 +194,7 @@ def crear_venta(con: Connection, ctx: ais.ContextoNegocio, datos: VentaIn) -> Ve
 def _huella(datos: VentaIn) -> str:
     cuerpo = {
         "medio_pago": datos.medio_pago,
+        "cliente_id": str(datos.cliente_id) if datos.cliente_id else None,
         "lineas": sorted((str(i), str(v), c) for (i, v), c in _cantidades_por_item(datos).items()),
     }
     return hashlib.sha256(json.dumps(cuerpo, sort_keys=True).encode()).hexdigest()
@@ -253,12 +262,15 @@ def _armar(con: Connection, ctx: ais.ContextoNegocio, filas_venta) -> list[Venta
             .where(ops_pago.c.venta_id.in_(ids))
         )
     }
+    de_clientes = clientes.nombres(con, ctx, list({f.cliente_id for f in filas_venta
+                                                   if f.cliente_id is not None}))
     return [
         VentaOut(
             id=f.id, numero=f.numero, fecha_hora=_utc(f.fecha_hora), estado=f.estado,
             total=f.total, moneda_codigo=f.moneda_codigo, medio_pago=medios.get(f.id, ""),
             lineas=lineas[f.id], anulada_en=_utc(f.anulada_en),
-            motivo_anulacion=f.motivo_anulacion,
+            motivo_anulacion=f.motivo_anulacion, cliente_id=f.cliente_id,
+            cliente_nombre=de_clientes.get(f.cliente_id),
         )
         for f in filas_venta
     ]

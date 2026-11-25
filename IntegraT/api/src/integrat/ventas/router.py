@@ -49,6 +49,10 @@ def cobrar(
         ) from None
     except existencias.SinExistencia as e:
         raise HTTPException(status.HTTP_409_CONFLICT, e.mensaje()) from None
+    except servicio.ClienteInvalido:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Ese cliente ya no está. Elige otro o vende a Consumidor final.") from None
     except servicio.FaltaVariante:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             "Elige la talla o el color de cada producto.") from None

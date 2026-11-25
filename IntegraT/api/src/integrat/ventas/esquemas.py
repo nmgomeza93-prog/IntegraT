@@ -25,6 +25,7 @@ class LineaIn(BaseModel):
 class VentaIn(BaseModel):
     lineas: Annotated[list[LineaIn], Field(min_length=1, max_length=50)]
     medio_pago: MedioPago
+    cliente_id: uuid.UUID | None = Field(default=None, description="Sin cliente = Consumidor final")
 
 
 class AnularIn(BaseModel):
@@ -59,6 +60,8 @@ class VentaOut(_Dinero):
     lineas: list[LineaOut]
     anulada_en: datetime | None = None
     motivo_anulacion: str | None = None
+    cliente_id: uuid.UUID | None = None
+    cliente_nombre: str | None = None  # nulo = Consumidor final
     insumos_en_falta: list[str] = []  # solo al cobrar: insumos que se acabaron con esta venta
     por_agotarse: list[str] = []  # lo vendido que quedó en su mínimo o en cero
 

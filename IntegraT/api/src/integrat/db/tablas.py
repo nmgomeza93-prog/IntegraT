@@ -398,6 +398,42 @@ ops_item_variante = sa.Table(
     **OPCIONES_TABLA,
 )
 
+ops_cliente = sa.Table(
+    "ops_cliente", metadata,
+    col_id(),
+    _fk("negocio_id", UUIDBinario(), "core_negocio.id"),
+    sa.Column("nombre", sa.String(120), nullable=False),
+    sa.Column("telefono", sa.String(20), nullable=True, comment="Normalizado: +50255551234"),
+    sa.Column("correo", sa.String(120), nullable=True),
+    sa.Column("direccion", sa.String(200), nullable=True),
+    sa.Column("tipo_id_fiscal", sa.String(3), nullable=False, server_default="CF"),
+    sa.Column("id_fiscal", sa.String(20), nullable=True, comment="NIT o CUI sin guiones"),
+    sa.Column("nombre_fiscal", sa.String(120), nullable=True),
+    sa.Column("notas", sa.String(300), nullable=True),
+    sa.Column("datos", sa.JSON(), nullable=True, comment="Campos propios: {campo_id: valor}"),
+    *cols_auditoria(),
+    sa.CheckConstraint("tipo_id_fiscal IN ('CF','NIT','CUI')", name="tipo_id_fiscal"),
+    sa.Index(None, "negocio_id", "nombre"),
+    sa.Index(None, "negocio_id", "telefono"),
+    sa.Index(None, "negocio_id", "id_fiscal"),
+    comment="Clientes del negocio",
+    **OPCIONES_TABLA,
+)
+
+ops_campo_cliente = sa.Table(
+    "ops_campo_cliente", metadata,
+    col_id(),
+    _fk("negocio_id", UUIDBinario(), "core_negocio.id"),
+    sa.Column("nombre", sa.String(40), nullable=False),
+    sa.Column("tipo", sa.String(8), nullable=False),
+    sa.Column("orden", sa.SmallInteger(), nullable=False, server_default=sa.text("0")),
+    *cols_auditoria(),
+    sa.CheckConstraint("tipo IN ('texto','numero','fecha','si_no')", name="tipo"),
+    sa.Index(None, "negocio_id"),
+    comment="Campos de cliente que define el negocio (Instagram, Cumpleaños…)",
+    **OPCIONES_TABLA,
+)
+
 ops_venta = sa.Table(
     "ops_venta", metadata,
     col_id(),
@@ -410,8 +446,11 @@ ops_venta = sa.Table(
     sa.Column("anulada_en", FechaHora, nullable=True),
     sa.Column("anulada_por", UUIDBinario(), nullable=True),
     sa.Column("motivo_anulacion", sa.String(200), nullable=True),
+    _fk("cliente_id", UUIDBinario(), "ops_cliente.id", nullable=True,
+        comment="Nulo = Consumidor final"),
     *cols_auditoria(),
     sa.UniqueConstraint("negocio_id", "numero"),
+    sa.Index(None, "cliente_id"),
     sa.CheckConstraint("estado IN ('pagada','anulada')", name="estado"),
     sa.CheckConstraint("total >= 0", name="total"),
     sa.Index(None, "negocio_id", "fecha_hora"),
