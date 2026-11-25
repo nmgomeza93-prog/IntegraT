@@ -48,7 +48,7 @@ lenguaje cotidiano. Cada acción de escritura registra `creado_por`/`actualizado
 ## App (pestaña "Productos" / "Menú")
 1. Lista vacía con el botón principal "Agregar mi primer platillo/producto" (ya diseñada en
    `DISENO_UX.md`) y, con datos, lista por categoría con buscador y precio.
-2. Hoja inferior para agregar: nombre → precio → (categoría opcional) → Guardar. Máximo 3 toques.
+2. Agregar y editar en una pantalla propia dentro de la sección (no en hoja inferior: una pantalla, una tarea): nombre → precio → (categoría opcional) → Guardar. Máximo 3 toques. Crear categorías desde la app queda para C3.
 3. Ficha: editar y "Archivar" (con confirmación).
 4. El checklist del Inicio marca "hecho" automáticamente (ej. 5 platillos agregados).
 5. Vocabulario del tipo de negocio en todo ("platillo" / "producto"); sin jerga.
@@ -59,6 +59,6 @@ lenguaje cotidiano. Cada acción de escritura registra `creado_por`/`actualizado
 |---|---|---|
 | C1 | Migración `0006`, tablas, semilla de categorías, endpoints, pruebas de API (incluye aislamiento entre negocios). | `pytest` + `curl` contra la API local. |
 | C2 | App: lista, agregar y editar con la API falsa y pruebas de navegador. | Pruebas R + recorrido visual. |
-| C3 | Checklist del Inicio con avance real y pulido (mensajes, estados vacíos, 390 px). | Recorrido en celular/navegador. |
+| C3 | Checklist del Inicio con avance real (reglas en la plantilla del tipo de negocio), crear categorías desde el formulario y pulido en 390 px. | Recorrido en celular/navegador. |
 
 Commit por paso, solo con tu confirmación y **sin push** (ver memoria del proyecto).

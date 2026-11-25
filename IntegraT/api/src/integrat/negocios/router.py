@@ -3,14 +3,20 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from sqlalchemy.engine import Engine
 
 from integrat.auth import seguridad
 from integrat.auth.dependencias import AccesoNegocio, UsuarioActual, acceso_negocio, usuario_actual
 from integrat.dependencias import obtener_engine
 from integrat.negocios import servicio
-from integrat.negocios.esquemas import AccesoOut, NegocioCreadoOut, NegocioIn, NegocioOut
+from integrat.negocios.esquemas import (
+    AccesoOut,
+    ImpuestosIn,
+    NegocioCreadoOut,
+    NegocioIn,
+    NegocioOut,
+)
 
 router = APIRouter(tags=["negocios"])
 Motor = Annotated[Engine, Depends(obtener_engine)]
@@ -59,3 +65,17 @@ def ver(negocio_id: uuid.UUID, acceso: Annotated[AccesoNegocio, Depends(acceso_n
     if negocio is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No encontramos ese negocio.")
     return negocio
+
+
+@router.put("/negocios/{negocio_id}/impuestos", status_code=status.HTTP_204_NO_CONTENT,
+            summary="Cómo pagas impuestos (régimen de IVA)")
+def fijar_impuestos(negocio_id: uuid.UUID, datos: ImpuestosIn,
+                    acceso: Annotated[AccesoNegocio, Depends(acceso_negocio)],
+                    engine: Motor) -> Response:
+    if negocio_id != acceso.contexto.negocio_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No encontramos ese negocio.")
+    if acceso.rol != "dueno":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo el dueño puede cambiar esto.")
+    with engine.begin() as con:
+        servicio.fijar_impuestos(con, acceso.contexto, datos)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

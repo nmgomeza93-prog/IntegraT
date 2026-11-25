@@ -8,6 +8,7 @@ from datetime import timedelta
 import sqlalchemy as sa
 from sqlalchemy.engine import Connection, Engine
 
+from integrat.contabilidad import motor as contabilidad
 from integrat.db import aislamiento as ais
 from integrat.db.tablas import (
     cat_pais,
@@ -21,13 +22,22 @@ from integrat.db.tablas import (
     core_negocio,
     core_negocio_capacidad,
     core_titular,
+    ops_compra,
+    ops_gasto,
+    ops_insumo,
+    ops_item,
+    ops_venta,
 )
 from integrat.db.tipos import ahora_utc, uuid7
+from integrat.gastos.servicio import sembrar_categorias as sembrar_categorias_gasto
+from integrat.insumos.recetas import contar_items_con_receta
 from integrat.items.servicio import sembrar_catalogo
-from integrat.negocios.esquemas import NegocioIn, NegocioOut, PrimerPaso
+from integrat.negocios.esquemas import ImpuestosIn, NegocioIn, NegocioOut, PrimerPaso
 
 PAIS_INICIAL = "GT"  # Guatemala; el país será configurable cuando haya más
 OPERACION_CREAR_NEGOCIO = "crear_negocio"
+# Régimen de IVA simple -> código de `fiscal_cfg_regimen` (Guatemala). [verificar]
+REGIMEN_IVA = {"general": "GT_IVA_GENERAL", "pequeno": "GT_IVA_PEQ_CONTRIBUYENTE", "no_se": None}
 VIGENCIA_IDEMPOTENCIA = timedelta(hours=24)
 
 
@@ -143,7 +153,60 @@ def crear_negocio(con: Connection, usuario_id: uuid.UUID, datos: NegocioIn) -> a
             "id": uuid7(), "capacidad": c.capacidad, "activa": c.activa_por_defecto,
         }))
     sembrar_catalogo(con, ctx, tipo)  # categorías de ejemplo del tipo de negocio
+    sembrar_categorias_gasto(con, ctx, tipo)
+    contabilidad.crear_libro(con, ctx)  # libro y plan de cuentas del negocio
     return ctx
+
+
+def _regimen_simple(codigo: str | None) -> str:
+    return next((simple for simple, c in REGIMEN_IVA.items() if c == codigo and c), "no_se")
+
+
+def fijar_impuestos(con: Connection, ctx: ais.ContextoNegocio, datos: ImpuestosIn) -> None:
+    """Fija el régimen de IVA del titular del negocio (lo abre si aún no existe).
+
+    Aplica a las operaciones siguientes; lo ya registrado conserva su tratamiento.
+    """
+    negocio = con.execute(
+        sa.select(core_negocio.c.titular_id, core_negocio.c.estado_onboarding)
+        .where(core_negocio.c.id == ctx.negocio_id).with_for_update()
+    ).one()
+    codigo = REGIMEN_IVA[datos.regimen_iva]
+    titular_id = negocio.titular_id
+    if titular_id is None:
+        if codigo is None:
+            return  # sin titular ya es "todavía no sé"
+        titular_id = uuid7()
+        con.execute(sa.insert(core_titular).values(
+            id=titular_id, pais_codigo=PAIS_INICIAL, estado="pendiente",
+            creado_por=ctx.usuario_id,
+        ))
+        con.execute(sa.insert(core_membresia_titular).values(
+            id=uuid7(), usuario_id=ctx.usuario_id, titular_id=titular_id, rol="titular_admin",
+            creado_por=ctx.usuario_id,
+        ))
+    con.execute(sa.update(core_titular).where(core_titular.c.id == titular_id).values(
+        regimen_iva_codigo=codigo, actualizado_por=ctx.usuario_id,
+        version=core_titular.c.version + 1,
+    ))
+    estado = dict(negocio.estado_onboarding or {})
+    if codigo is not None:
+        estado["da_factura"] = "si"
+    con.execute(sa.update(core_negocio).where(core_negocio.c.id == ctx.negocio_id).values(
+        titular_id=titular_id, estado_onboarding=estado, actualizado_por=ctx.usuario_id,
+    ))
+
+
+def _cumple_regla(regla: dict | None, conteos: dict[str, int]) -> bool:
+    """Un paso del checklist se marca solo cuando se cumple su regla (definida en la plantilla).
+
+    Cada clave de la regla es `<cosa>_minimo`: items_minimo, ventas_minimo, gastos_fijos_minimo...
+    """
+    if not regla:
+        return False
+    return all(
+        conteos.get(clave.removesuffix("_minimo"), 0) >= minimo for clave, minimo in regla.items()
+    )
 
 
 def leer_negocio(con: Connection, ctx: ais.ContextoNegocio) -> NegocioOut | None:
@@ -175,12 +238,35 @@ def leer_negocio(con: Connection, ctx: ais.ContextoNegocio) -> NegocioOut | None
         )
     ).scalar_one_or_none() or {}
     estado = negocio["estado_onboarding"] or {}
+    regimen = None
+    if negocio["titular_id"] is not None:
+        regimen = con.execute(
+            sa.select(core_titular.c.regimen_iva_codigo)
+            .where(core_titular.c.id == negocio["titular_id"])
+        ).scalar_one_or_none()
     hechos = set(estado.get("pasos_hechos", []))
-    pasos = [PrimerPaso(**p, hecho=p["clave"] in hechos)
-             for p in plantilla.get("primeros_pasos", [])]
+    items = con.execute(ais.seleccionar(ctx, ops_item, sa.func.count())).scalar_one()
+    ventas = con.execute(
+        ais.seleccionar(ctx, ops_venta, sa.func.count()).where(ops_venta.c.estado == "pagada")
+    ).scalar_one()
+    gastos_fijos = con.execute(
+        ais.seleccionar(ctx, ops_gasto, sa.func.count()).where(ops_gasto.c.es_fijo.is_(True))
+    ).scalar_one()
+    insumos = con.execute(ais.seleccionar(ctx, ops_insumo, sa.func.count())).scalar_one()
+    conteos = {"items": items, "ventas": ventas, "gastos_fijos": gastos_fijos, "insumos": insumos,
+               "recetas": contar_items_con_receta(con, ctx),
+               "compras": con.execute(
+                   ais.seleccionar(ctx, ops_compra, sa.func.count())
+                   .where(ops_compra.c.estado == "registrada")).scalar_one()}
+    pasos = [
+        PrimerPaso(clave=p["clave"], texto=p["texto"], icono=p["icono"],
+                   hecho=p["clave"] in hechos or _cumple_regla(p.get("regla"), conteos))
+        for p in plantilla.get("primeros_pasos", [])
+    ]
     return NegocioOut(
         id=negocio["id"], nombre=negocio["nombre"], tipo_negocio_codigo=tipo,
         pais_codigo=negocio["pais_codigo"], moneda_codigo=negocio["moneda_codigo"],
         zona_horaria=negocio["zona_horaria"], da_factura=estado.get("da_factura", "no_se"),
+        regimen_iva=_regimen_simple(regimen),
         capacidades=list(capacidades), vocabulario=vocabulario, primeros_pasos=pasos,
     )

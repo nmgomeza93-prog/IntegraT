@@ -223,7 +223,7 @@
 }
 
 /* Notificaciones de Shiny con estilo propio */
-#shiny-notification-panel { bottom: calc(var(--alto-nav-inferior) + var(--esp-3)); right: 0; left: 0; margin: 0 auto; width: min(100% - 32px, 480px); }
+#shiny-notification-panel { bottom: calc(var(--alto-nav-inferior) + var(--esp-3) + env(safe-area-inset-bottom)) !important; right: 0; left: 0; margin: 0 auto; width: min(100% - 32px, 480px); }
 .shiny-notification {
   border-radius: var(--radio-control);
   border: 0;
@@ -236,3 +236,165 @@
 
 .separado { margin-top: var(--esp-5); }
 .accion-rapida__icono svg { width: 22px !important; height: 22px !important; }
+
+/* Catálogo: grupos por categoría, buscador y selector */
+.catalogo { display: flex; flex-direction: column; gap: var(--esp-3); }
+.catalogo__grupo {
+  font-size: var(--texto-pequeno);
+  font-weight: 700;
+  color: var(--color-texto-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: var(--esp-3) 0 calc(var(--esp-1) * -1);
+}
+.catalogo__sin-resultados { color: var(--color-texto-2); text-align: center; margin: var(--esp-4) 0; }
+.catalogo .boton-primario,
+.catalogo .boton-secundario { width: 100%; }
+.catalogo .shiny-html-output + .shiny-html-output,
+.catalogo .campo + .shiny-html-output { margin-top: var(--esp-3); }
+.campo .form-select { padding-right: 2.5rem; }
+
+/* Vender: encabezado, barra del carrito, líneas y total */
+.vender { display: flex; flex-direction: column; gap: var(--esp-3); }
+.vender__encabezado { display: flex; align-items: center; justify-content: space-between; gap: var(--esp-3); }
+.vender__encabezado .pantalla__titulo { margin-bottom: 0; }
+.lista-opciones__item--fija { cursor: default; }
+.cantidad-insignia {
+  display: inline-block;
+  min-width: 2rem;
+  margin-right: var(--esp-2);
+  padding: 2px var(--esp-2);
+  border-radius: 999px;
+  background: var(--color-marca);
+  color: #fff;
+  font-weight: 700;
+  text-align: center;
+}
+.barra-carrito {
+  position: sticky;
+  bottom: calc(var(--alto-nav-inferior) + var(--esp-2));
+  display: flex;
+  align-items: center;
+  gap: var(--esp-3);
+  padding: var(--esp-3);
+  background: var(--color-superficie);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio-tarjeta);
+  box-shadow: var(--sombra-tarjeta);
+  z-index: 5;
+}
+.barra-carrito__texto { flex: 1; font-weight: 700; }
+.barra-carrito .boton-primario { width: auto; min-width: 8rem; }
+.lineas-carrito { list-style: none; margin: 0; padding: 0; }
+.linea-carrito {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--esp-1) var(--esp-3);
+  align-items: center;
+  padding: var(--esp-3) 0;
+  border-bottom: 1px solid var(--color-borde);
+}
+.linea-carrito__nombre { font-weight: 600; grid-column: 1 / -1; }
+.linea-carrito__control { display: inline-flex; align-items: center; gap: var(--esp-3); }
+.linea-carrito__cantidad { min-width: 1.5rem; text-align: center; font-weight: 700; }
+.linea-carrito__total { text-align: right; font-weight: 600; }
+.boton-cantidad {
+  width: var(--toque-minimo);
+  height: var(--toque-minimo);
+  border-radius: 50%;
+  border: 1px solid var(--color-borde);
+  background: var(--color-superficie);
+  color: var(--color-marca);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.total-venta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-top: var(--esp-3);
+  font-weight: 700;
+}
+.total-venta__monto { font-size: var(--texto-titulo); }
+.vender .boton-primario, .vender .boton-secundario { width: 100%; }
+.vender .barra-carrito .boton-primario { width: auto; }
+.vender .barra-carrito--cobro .boton-primario { width: 100%; }
+.vender .tarjeta .entrada__texto { margin: 0 0 var(--esp-3); }
+
+/* Gastos: selector de mes y resumen por categoría */
+.gastos, .inventario, .compras { display: flex; flex-direction: column; gap: var(--esp-3); }
+.gastos .boton-primario, .gastos .boton-secundario,
+.inventario .boton-primario, .inventario .boton-secundario,
+.compras .boton-primario, .compras .boton-secundario { width: 100%; }
+.compras__total { margin: var(--esp-2) 0 0; font-weight: 700; text-align: right; }
+.selector-mes { display: flex; align-items: center; justify-content: space-between; gap: var(--esp-3); }
+.selector-mes__nombre { font-weight: 700; font-size: var(--texto-subtitulo); }
+.selector-mes .boton-cantidad:disabled { opacity: 0.35; }
+.lista-categorias { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--esp-3); }
+.categoria-gasto {
+  display: grid;
+  gap: var(--esp-1);
+  padding: var(--esp-3) var(--esp-4);
+  background: var(--color-superficie);
+  border-radius: var(--radio-tarjeta);
+  box-shadow: var(--sombra-tarjeta);
+}
+.categoria-gasto__fila { display: flex; justify-content: space-between; gap: var(--esp-3); font-weight: 600; }
+.categoria-gasto__barra { width: 100%; height: 8px; border-radius: 999px; overflow: hidden; border: 0; background: var(--color-borde); }
+.categoria-gasto__barra::-webkit-progress-bar { background: var(--color-borde); }
+.categoria-gasto__barra::-webkit-progress-value { background: var(--color-marca); border-radius: 999px; }
+.categoria-gasto__barra::-moz-progress-bar { background: var(--color-marca); border-radius: 999px; }
+.categoria-gasto__porcentaje { color: var(--color-texto-2); font-size: var(--texto-pequeno); }
+.casilla .form-check, .casilla .checkbox { min-height: var(--toque-minimo); display: flex; align-items: center; }
+
+/* Inventario: ideas para empezar */
+.sugerencias { display: flex; flex-wrap: wrap; gap: var(--esp-2); }
+.sugerencia {
+  min-height: var(--toque-minimo);
+  padding: 0 var(--esp-4);
+  border: 1px solid var(--color-borde);
+  border-radius: 999px;
+  background: var(--color-superficie);
+  color: var(--color-texto);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Receta de un platillo o producto y aviso de insumos agotados */
+.lista-receta { list-style: none; margin: 0; padding: 0; }
+.linea-receta {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-3);
+  min-height: var(--toque-minimo);
+  padding: var(--esp-2) var(--esp-4);
+  background: var(--color-superficie);
+  border-bottom: 1px solid var(--color-borde);
+}
+.linea-receta__texto { flex: 1; display: flex; flex-direction: column; font-weight: 600; }
+.linea-receta__detalle { color: var(--color-texto-2); font-weight: 400; font-size: var(--texto-pequeno); }
+.linea-receta__costo { font-weight: 600; }
+.aviso-insumos { display: grid; gap: var(--esp-2); }
+.aviso-insumos .entrada__texto { margin: 0; }
+.pila > .lista-receta { margin-top: var(--esp-3); }
+.compras .tarjeta-numero + .lista-opciones { margin-top: var(--esp-3); }
+
+/* Inicio: "Tu mes" (lo calcula la API desde los asientos) */
+.tu-mes__valor--negativo { color: var(--color-alerta); }
+.tu-mes__lista {
+  list-style: none;
+  margin: var(--esp-3) 0 0;
+  padding: var(--esp-3) 0 0;
+  border-top: 1px solid var(--color-borde);
+  display: grid;
+  gap: var(--esp-2);
+}
+.tu-mes__fila { display: flex; justify-content: space-between; gap: var(--esp-3); }
+.tu-mes__monto { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tu-mes__nota { margin: var(--esp-3) 0 0; color: var(--color-texto-2); font-size: var(--texto-pequeno); }
+
+/* Tus impuestos */
+.impuestos { display: flex; flex-direction: column; gap: var(--esp-3); }
+.impuestos .boton-primario { width: 100%; }
+.impuestos .entrada__texto { margin: 0; }

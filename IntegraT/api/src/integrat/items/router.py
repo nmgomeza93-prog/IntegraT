@@ -45,7 +45,8 @@ _DESFASADA = HTTPException(
 
 @router.get("/categorias", response_model=list[CategoriaOut], summary="Mis categorías")
 def listar_categorias(acceso: Acceso, engine: Motor) -> list[CategoriaOut]:
-    with engine.connect() as con:
+    with engine.begin() as con:
+        servicio.asegurar_categorias_de_ejemplo(con, acceso.contexto)
         return servicio.listar_categorias(con, acceso.contexto)
 
 

@@ -6,4 +6,4 @@ default:
 
 shinyapps:
   # Reemplaza por la dirección HTTPS que genera Railway (infra/railway.md), sin "/" al final.
-  api_base_url: "https://<DIRECCION-DE-RAILWAY>"
+  api_base_url: "https://proud-emotion-production-dd98bfff.up.railway.app"

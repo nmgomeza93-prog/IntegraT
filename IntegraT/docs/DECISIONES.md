@@ -27,6 +27,7 @@
 | D-19 | **Motor de base de datos: MySQL 9.x** (Railway), en lugar de PostgreSQL | Reemplaza lo dicho sobre PostgreSQL en los demás documentos. Como MySQL no tiene RLS, esquemas ni restricciones diferidas, el aislamiento por negocio y el cuadre de asientos se garantizan en la API; `MODELO_DATOS.md` se adapta en el paso 2 de la Fase 1 | `PLAN_FASE1.md` paso 2 |
 | D-20 | **Credenciales actuales (`camprd`) para el desarrollo** | Decisión del dueño (2026-11-23). Riesgo aceptado: el usuario tiene privilegios globales en el servidor. El código **solo opera sobre la base `integrat`** y nunca toca otras bases | `CLAUDE.md` |
 | D-21 | **La API del piloto corre en Railway**, junto a la base (no en servidor propio) | Decisión del dueño (2026-11-24). Railway da HTTPS con certificado válido sin comprar dominio (resuelve R-03). No se puede limitar por IP a shinyapps.io, así que se endurece la API antes de abrirla | `PLAN_CIERRE_FASE1.md` |
+| D-22 | **Motor contable: IVA según el régimen; tarjeta y transferencia directo a Banco** | Decisión del dueño (2026-11-25). Régimen general: se separa el 12 % incluido (débito en ventas; crédito solo en compras con número de factura y gastos con factura, y la compra entra al inventario sin IVA). Pequeño contribuyente y "todavía no sé": sin separar. Sin comisiones de tarjeta por ahora. Todo en reglas configurables, a validar por el contador (D-12) | `PLAN_CONTABILIDAD.md` |
 
 ## Recomendaciones derivadas (pendientes de tu visto bueno)
 

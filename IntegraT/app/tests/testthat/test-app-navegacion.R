@@ -16,11 +16,11 @@ test_that("la navegación inferior cambia de sección y el ➕ abre la hoja de a
   expect_true(esperar_visible(app, ".nav-inferior"))
 
   # Inicio por defecto
-  expect_true(visible(app, "#inicio-ir_productos"))
+  expect_true(esperar_visible(app, "#inicio-hacer_paso"))
 
   # Ir a Vender
   app$click(selector = ".nav-inferior__boton[data-destino='vender']")
-  expect_true(esperar_visible(app, "#vender-agregar"))
+  expect_true(esperar_visible(app, "#vender-ver_hoy"))
   expect_equal(
     app$get_js("document.querySelector(\"[data-destino='vender']\").getAttribute('aria-current')"),
     "page"

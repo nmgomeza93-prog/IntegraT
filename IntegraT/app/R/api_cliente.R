@@ -43,8 +43,11 @@ mensaje_error_api <- function(estado, cuerpo) {
 # list(ok, estado, cuerpo, mensaje). `estado` = 0 si no hubo conexión.
 # El token (si lo hay) viaja solo en el encabezado Authorization.
 api_llamar <- function(metodo, ruta, cuerpo = NULL, token = NULL, tiempo_max = 10,
-                       cabeceras = NULL) {
+                       cabeceras = NULL, consulta = NULL) {
   peticion <- httr2::req_method(api_peticion(ruta, tiempo_max), metodo)
+  if (length(consulta) > 0) {
+    peticion <- do.call(httr2::req_url_query, c(list(peticion), as.list(consulta)))
+  }
   if (!is.null(token)) peticion <- httr2::req_auth_bearer_token(peticion, token)
   if (length(cabeceras) > 0) {
     peticion <- do.call(httr2::req_headers, c(list(peticion), as.list(cabeceras)))

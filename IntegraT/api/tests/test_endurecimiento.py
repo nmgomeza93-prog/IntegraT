@@ -46,13 +46,13 @@ def test_la_salud_publica_no_revela_entorno_ni_migracion(app_en, monkeypatch, bd
     assert cuerpo["estado"] == "ok" and cuerpo["bd"]["conectada"] is True
     assert cuerpo["entorno"] is None
     assert cuerpo["bd"]["migracion"] is None
-    assert entorno not in r.text and "0006" not in r.text
+    assert entorno not in r.text and "0013" not in r.text
 
 
 def test_la_salud_en_dev_si_da_el_detalle(app_en, monkeypatch, bd_migrada):
     cuerpo = app_en("dev", monkeypatch, bd_migrada).get("/v1/salud").json()
     assert cuerpo["entorno"] == "dev"
-    assert cuerpo["bd"]["migracion"] == "0006"
+    assert cuerpo["bd"]["migracion"] == "0013"
 
 
 def test_una_peticion_enorme_se_rechaza_con_413(cliente_api):

@@ -63,7 +63,17 @@ server <- function(input, output, session) {
   observeEvent(input$nav_destino, {
     if (input$nav_destino %in% SECCIONES) bslib::nav_select("seccion", input$nav_destino)
   })
-  observeEvent(input$accion_rapida, aviso_pronto())
+  observeEvent(input$accion_rapida, {
+    if (identical(input$accion_rapida, "registrar_gasto")) {
+      s$abrir_gasto <- isolate(s$abrir_gasto) + 1L  # abre el formulario de gastos
+      ir_a("gastos")
+    } else if (identical(input$accion_rapida, "registrar_compra")) {
+      s$abrir_compra <- isolate(s$abrir_compra) + 1L  # abre el formulario de compras
+      ir_a("compras")
+    } else {
+      aviso_pronto()
+    }
+  })
 
   output$fecha <- renderText({
     invalidateLater(60 * 60 * 1000)
@@ -80,10 +90,14 @@ server <- function(input, output, session) {
   mod_registro_server("registro", s, ir_pantalla)
   mod_login_server("login", s, ir_pantalla)
   mod_onboarding_server("onboarding", s, ir_pantalla)
-  mod_inicio_server("inicio", ir_a)
-  mod_vender_server("vender", ir_a)
-  mod_productos_server("productos")
-  mod_mas_server("mas", salir)
+  mod_inicio_server("inicio", s, ir_a, seccion = reactive(input$seccion))
+  mod_vender_server("vender", s, ir_a)
+  mod_productos_server("productos", s, ir_a)
+  mod_gastos_server("gastos", s, ir_a)
+  mod_inventario_server("inventario", s, ir_a)
+  mod_compras_server("compras", s, ir_a)
+  mod_impuestos_server("impuestos", s, ir_a)
+  mod_mas_server("mas", salir, ir_a)
 }
 
 shinyApp(ui, server)

@@ -36,7 +36,10 @@
   }
 
   // --- Navegación inferior: marca la sección activa ---
+  // Secciones que no tienen botón propio en la barra se muestran bajo otra (Gastos vive en "Más").
+  var BAJO_BOTON = { gastos: "mas", inventario: "mas", compras: "mas", impuestos: "mas" };
   function marcarSeccion(destino) {
+    destino = BAJO_BOTON[destino] || destino;
     document.querySelectorAll(".nav-inferior__boton[data-destino]").forEach(function (b) {
       if (b.getAttribute("data-destino") === destino) b.setAttribute("aria-current", "page");
       else b.removeAttribute("aria-current");
@@ -65,6 +68,14 @@
     var elige = ev.target.closest("[data-elige-input]");
     if (elige) {
       var entrada = elige.getAttribute("data-elige-input");
+      // En un selector segmentado (o un grupo marcado con data-elige-grupo), la opción tocada
+      // queda marcada de inmediato (sin recargar)
+      var grupo = elige.closest(".segmentado, [data-elige-grupo]");
+      if (grupo) {
+        grupo.querySelectorAll("[data-elige-input]").forEach(function (b) {
+          b.setAttribute("aria-pressed", b === elige ? "true" : "false");
+        });
+      }
       if (window.Shiny) Shiny.setInputValue(entrada, elige.getAttribute("data-elige-valor"), { priority: "event" });
       return;
     }
@@ -84,6 +95,21 @@
       if (boton) { ev.preventDefault(); boton.click(); }
     }
   });
+
+  // --- Campo de fecha del navegador (input type="date"): Shiny no lo conecta por sí solo ---
+  if (window.Shiny && Shiny.inputBindings && window.jQuery) {
+    var enlaceFecha = new Shiny.InputBinding();
+    jQuery.extend(enlaceFecha, {
+      find: function (alcance) { return jQuery(alcance).find('input[type="date"]'); },
+      getValue: function (el) { return el.value; },
+      setValue: function (el, valor) { el.value = valor; },
+      subscribe: function (el, callback) {
+        jQuery(el).on("change.enlaceFecha input.enlaceFecha", function () { callback(true); });
+      },
+      unsubscribe: function (el) { jQuery(el).off(".enlaceFecha"); }
+    });
+    Shiny.inputBindings.register(enlaceFecha, "integrat.fecha");
+  }
 
   // --- Aviso amable de reconexión ---
   function aviso(visible) {

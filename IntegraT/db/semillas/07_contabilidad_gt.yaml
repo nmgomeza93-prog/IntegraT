@@ -1,0 +1,258 @@
+# Contabilidad de Guatemala: roles de cuenta, plan de cuentas de ejemplo y reglas del motor.
+# ⚠️ TODO lo de este archivo está PENDIENTE de validación por el contador
+#    (docs/REVISION_CONTADOR.md §5, §6 y §13; puntos C-05, C-06 y C-20).
+# El motor nunca usa códigos de cuenta: usa ROLES. El contador puede renombrar o recodificar
+# las cuentas sin romper nada, mientras cada rol siga apuntando a una cuenta.
+
+- tabla: cont_cfg_rol_cuenta
+  filas:
+    - {codigo: CAJA,                    naturaleza: deudora,   descripcion_simple: Efectivo}
+    - {codigo: BANCO,                   naturaleza: deudora,   descripcion_simple: Banco}
+    - {codigo: POR_COBRAR_PASARELA,     naturaleza: deudora,   descripcion_simple: Pagos con tarjeta por recibir}
+    - {codigo: POR_COBRAR_CLIENTES,     naturaleza: deudora,   descripcion_simple: Te deben}
+    - {codigo: INVENTARIO_MERCADERIA,   naturaleza: deudora,   descripcion_simple: Lo que tienes para vender}
+    - {codigo: INVENTARIO_INSUMOS,      naturaleza: deudora,   descripcion_simple: Ingredientes e insumos}
+    - {codigo: IVA_CREDITO,             naturaleza: deudora,   descripcion_simple: IVA de tus compras}
+    - {codigo: PROVEEDORES,             naturaleza: acreedora, descripcion_simple: Le debes a proveedores}
+    - {codigo: IVA_DEBITO,              naturaleza: acreedora, descripcion_simple: IVA de tus ventas}
+    - {codigo: IMPUESTO_POR_PAGAR,      naturaleza: acreedora, descripcion_simple: Impuestos por pagar}
+    - {codigo: CAPITAL,                 naturaleza: acreedora, descripcion_simple: Lo que pusiste en el negocio}
+    - {codigo: RETIROS_PROPIETARIO,     naturaleza: deudora,   descripcion_simple: Lo que sacaste para ti}
+    - {codigo: RESULTADOS_ACUMULADOS,   naturaleza: acreedora, descripcion_simple: Ganancias de años anteriores}
+    - {codigo: VENTAS,                  naturaleza: acreedora, descripcion_simple: Lo que vendiste}
+    - {codigo: VENTAS_ENVIOS,           naturaleza: acreedora, descripcion_simple: Envíos cobrados}
+    - {codigo: OTROS_INGRESOS,          naturaleza: acreedora, descripcion_simple: Otros ingresos}
+    - {codigo: COSTO_VENTAS,            naturaleza: deudora,   descripcion_simple: Lo que te costó lo que vendiste}
+    - {codigo: MERMA,                   naturaleza: deudora,   descripcion_simple: Lo que se perdió o se dañó}
+    - {codigo: GASTO_RENTA,             naturaleza: deudora,   descripcion_simple: Renta}
+    - {codigo: GASTO_SERVICIOS_BASICOS, naturaleza: deudora,   descripcion_simple: "Luz, agua y gas"}
+    - {codigo: GASTO_COMUNICACIONES,    naturaleza: deudora,   descripcion_simple: Teléfono e internet}
+    - {codigo: GASTO_SUELDOS,           naturaleza: deudora,   descripcion_simple: Sueldos}
+    - {codigo: GASTO_PUBLICIDAD,        naturaleza: deudora,   descripcion_simple: Publicidad}
+    - {codigo: GASTO_ENVIOS,            naturaleza: deudora,   descripcion_simple: Envíos}
+    - {codigo: GASTO_COMISIONES,        naturaleza: deudora,   descripcion_simple: Comisiones}
+    - {codigo: GASTO_SOFTWARE,          naturaleza: deudora,   descripcion_simple: Servicios digitales}
+    - {codigo: GASTO_MANTENIMIENTO,     naturaleza: deudora,   descripcion_simple: Reparaciones}
+    - {codigo: GASTO_TRANSPORTE,        naturaleza: deudora,   descripcion_simple: Transporte}
+    - {codigo: GASTO_VARIOS,            naturaleza: deudora,   descripcion_simple: Otros gastos}
+    - {codigo: IMPUESTO_PEQ_CONTRIBUYENTE, naturaleza: deudora, descripcion_simple: Impuesto sobre ventas}
+
+# Cada cuenta: codigo, nombre, nombre_simple, tipo, naturaleza, padre (código) y rol (opcional).
+# Solo las cuentas sin hijas aceptan movimientos. Las dos plantillas solo difieren en la cuenta
+# de ventas (4101 mercadería / 4102 alimentos y bebidas).
+- tabla: cont_cfg_plantilla_plan_cuentas
+  filas:
+    - pais_codigo: GT
+      tipo_negocio_codigo: ventas_en_linea
+      version: 1
+      contenido:
+        cuentas:
+          - {codigo: "1",    nombre: ACTIVO,                              tipo: activo,     naturaleza: deudora}
+          - {codigo: "11",   nombre: Activo corriente,                    tipo: activo,     naturaleza: deudora,   padre: "1"}
+          - {codigo: "1101", nombre: Caja general,                        tipo: activo,     naturaleza: deudora,   padre: "11", rol: CAJA,                  nombre_simple: Efectivo}
+          - {codigo: "1103", nombre: Bancos,                              tipo: activo,     naturaleza: deudora,   padre: "11", rol: BANCO,                 nombre_simple: Banco}
+          - {codigo: "1104", nombre: Pasarelas de pago por liquidar,      tipo: activo,     naturaleza: deudora,   padre: "11", rol: POR_COBRAR_PASARELA,   nombre_simple: Pagos con tarjeta por recibir}
+          - {codigo: "1105", nombre: Clientes,                            tipo: activo,     naturaleza: deudora,   padre: "11", rol: POR_COBRAR_CLIENTES,   nombre_simple: Te deben}
+          - {codigo: "1107", nombre: Inventario de mercadería,            tipo: activo,     naturaleza: deudora,   padre: "11", rol: INVENTARIO_MERCADERIA, nombre_simple: Lo que tienes para vender}
+          - {codigo: "1108", nombre: Inventario de insumos,               tipo: activo,     naturaleza: deudora,   padre: "11", rol: INVENTARIO_INSUMOS,    nombre_simple: Ingredientes e insumos}
+          - {codigo: "1110", nombre: IVA por cobrar (crédito fiscal),     tipo: activo,     naturaleza: deudora,   padre: "11", rol: IVA_CREDITO,           nombre_simple: IVA de tus compras}
+          - {codigo: "2",    nombre: PASIVO,                              tipo: pasivo,     naturaleza: acreedora}
+          - {codigo: "21",   nombre: Pasivo corriente,                    tipo: pasivo,     naturaleza: acreedora, padre: "2"}
+          - {codigo: "2101", nombre: Proveedores,                         tipo: pasivo,     naturaleza: acreedora, padre: "21", rol: PROVEEDORES,           nombre_simple: Le debes a proveedores}
+          - {codigo: "2103", nombre: IVA por pagar (débito fiscal),       tipo: pasivo,     naturaleza: acreedora, padre: "21", rol: IVA_DEBITO,            nombre_simple: IVA de tus ventas}
+          - {codigo: "2104", nombre: Impuestos por pagar,                 tipo: pasivo,     naturaleza: acreedora, padre: "21", rol: IMPUESTO_POR_PAGAR,    nombre_simple: Impuestos por pagar}
+          - {codigo: "3",    nombre: PATRIMONIO,                          tipo: patrimonio, naturaleza: acreedora}
+          - {codigo: "3101", nombre: Capital,                             tipo: patrimonio, naturaleza: acreedora, padre: "3", rol: CAPITAL,               nombre_simple: Lo que pusiste en el negocio}
+          - {codigo: "3102", nombre: Retiros del propietario,             tipo: patrimonio, naturaleza: deudora,   padre: "3", rol: RETIROS_PROPIETARIO,   nombre_simple: Lo que sacaste para ti}
+          - {codigo: "3201", nombre: Resultados acumulados,               tipo: patrimonio, naturaleza: acreedora, padre: "3", rol: RESULTADOS_ACUMULADOS}
+          - {codigo: "4",    nombre: INGRESOS,                            tipo: ingreso,    naturaleza: acreedora}
+          - {codigo: "4101", nombre: Ventas de mercadería,                tipo: ingreso,    naturaleza: acreedora, padre: "4", rol: VENTAS,                nombre_simple: Lo que vendiste}
+          - {codigo: "4103", nombre: Ingresos por envíos cobrados,        tipo: ingreso,    naturaleza: acreedora, padre: "4", rol: VENTAS_ENVIOS,         nombre_simple: Envíos cobrados}
+          - {codigo: "4201", nombre: Otros ingresos,                      tipo: ingreso,    naturaleza: acreedora, padre: "4", rol: OTROS_INGRESOS,        nombre_simple: Otros ingresos}
+          - {codigo: "5",    nombre: COSTOS,                              tipo: costo,       naturaleza: deudora}
+          - {codigo: "5101", nombre: Costo de ventas,                     tipo: costo,      naturaleza: deudora,   padre: "5", rol: COSTO_VENTAS,          nombre_simple: Lo que te costó lo que vendiste}
+          - {codigo: "5102", nombre: Mermas y desperdicios,               tipo: costo,      naturaleza: deudora,   padre: "5", rol: MERMA,                 nombre_simple: Lo que se perdió o se dañó}
+          - {codigo: "6",    nombre: GASTOS,                              tipo: gasto,      naturaleza: deudora}
+          - {codigo: "6101", nombre: Alquileres,                          tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_RENTA,             nombre_simple: Renta}
+          - {codigo: "6102", nombre: "Energía eléctrica, agua y gas",     tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_SERVICIOS_BASICOS, nombre_simple: "Luz, agua y gas"}
+          - {codigo: "6103", nombre: Teléfono e internet,                 tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_COMUNICACIONES,    nombre_simple: Teléfono e internet}
+          - {codigo: "6104", nombre: Sueldos y salarios,                  tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_SUELDOS,           nombre_simple: Sueldos}
+          - {codigo: "6105", nombre: Publicidad,                          tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_PUBLICIDAD,        nombre_simple: Publicidad}
+          - {codigo: "6106", nombre: Envíos y fletes sobre ventas,        tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_ENVIOS,            nombre_simple: Envíos}
+          - {codigo: "6107", nombre: Comisiones bancarias y de pasarelas, tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_COMISIONES,        nombre_simple: Comisiones}
+          - {codigo: "6108", nombre: Software y servicios digitales,      tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_SOFTWARE,          nombre_simple: Servicios digitales}
+          - {codigo: "6109", nombre: Mantenimiento y reparaciones,        tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_MANTENIMIENTO,     nombre_simple: Reparaciones}
+          - {codigo: "6110", nombre: Transporte y combustible,            tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_TRANSPORTE,        nombre_simple: Transporte}
+          - {codigo: "6190", nombre: Gastos varios,                       tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_VARIOS,            nombre_simple: Otros gastos}
+          - {codigo: "6201", nombre: Impuesto de pequeño contribuyente,   tipo: gasto,      naturaleza: deudora,   padre: "6", rol: IMPUESTO_PEQ_CONTRIBUYENTE, nombre_simple: Impuesto sobre ventas}
+    - pais_codigo: GT
+      tipo_negocio_codigo: restaurante
+      version: 1
+      contenido:
+        cuentas:
+          - {codigo: "1",    nombre: ACTIVO,                              tipo: activo,     naturaleza: deudora}
+          - {codigo: "11",   nombre: Activo corriente,                    tipo: activo,     naturaleza: deudora,   padre: "1"}
+          - {codigo: "1101", nombre: Caja general,                        tipo: activo,     naturaleza: deudora,   padre: "11", rol: CAJA,                  nombre_simple: Efectivo}
+          - {codigo: "1103", nombre: Bancos,                              tipo: activo,     naturaleza: deudora,   padre: "11", rol: BANCO,                 nombre_simple: Banco}
+          - {codigo: "1104", nombre: Pasarelas de pago por liquidar,      tipo: activo,     naturaleza: deudora,   padre: "11", rol: POR_COBRAR_PASARELA,   nombre_simple: Pagos con tarjeta por recibir}
+          - {codigo: "1105", nombre: Clientes,                            tipo: activo,     naturaleza: deudora,   padre: "11", rol: POR_COBRAR_CLIENTES,   nombre_simple: Te deben}
+          - {codigo: "1107", nombre: Inventario de mercadería,            tipo: activo,     naturaleza: deudora,   padre: "11", rol: INVENTARIO_MERCADERIA, nombre_simple: Lo que tienes para vender}
+          - {codigo: "1108", nombre: Inventario de insumos (cocina),      tipo: activo,     naturaleza: deudora,   padre: "11", rol: INVENTARIO_INSUMOS,    nombre_simple: Ingredientes}
+          - {codigo: "1110", nombre: IVA por cobrar (crédito fiscal),     tipo: activo,     naturaleza: deudora,   padre: "11", rol: IVA_CREDITO,           nombre_simple: IVA de tus compras}
+          - {codigo: "2",    nombre: PASIVO,                              tipo: pasivo,     naturaleza: acreedora}
+          - {codigo: "21",   nombre: Pasivo corriente,                    tipo: pasivo,     naturaleza: acreedora, padre: "2"}
+          - {codigo: "2101", nombre: Proveedores,                         tipo: pasivo,     naturaleza: acreedora, padre: "21", rol: PROVEEDORES,           nombre_simple: Le debes a proveedores}
+          - {codigo: "2103", nombre: IVA por pagar (débito fiscal),       tipo: pasivo,     naturaleza: acreedora, padre: "21", rol: IVA_DEBITO,            nombre_simple: IVA de tus ventas}
+          - {codigo: "2104", nombre: Impuestos por pagar,                 tipo: pasivo,     naturaleza: acreedora, padre: "21", rol: IMPUESTO_POR_PAGAR,    nombre_simple: Impuestos por pagar}
+          - {codigo: "3",    nombre: PATRIMONIO,                          tipo: patrimonio, naturaleza: acreedora}
+          - {codigo: "3101", nombre: Capital,                             tipo: patrimonio, naturaleza: acreedora, padre: "3", rol: CAPITAL,               nombre_simple: Lo que pusiste en el negocio}
+          - {codigo: "3102", nombre: Retiros del propietario,             tipo: patrimonio, naturaleza: deudora,   padre: "3", rol: RETIROS_PROPIETARIO,   nombre_simple: Lo que sacaste para ti}
+          - {codigo: "3201", nombre: Resultados acumulados,               tipo: patrimonio, naturaleza: acreedora, padre: "3", rol: RESULTADOS_ACUMULADOS}
+          - {codigo: "4",    nombre: INGRESOS,                            tipo: ingreso,    naturaleza: acreedora}
+          - {codigo: "4102", nombre: Ventas de alimentos y bebidas,       tipo: ingreso,    naturaleza: acreedora, padre: "4", rol: VENTAS,                nombre_simple: Lo que vendiste}
+          - {codigo: "4103", nombre: Ingresos por envíos cobrados,        tipo: ingreso,    naturaleza: acreedora, padre: "4", rol: VENTAS_ENVIOS,         nombre_simple: Envíos cobrados}
+          - {codigo: "4201", nombre: Otros ingresos,                      tipo: ingreso,    naturaleza: acreedora, padre: "4", rol: OTROS_INGRESOS,        nombre_simple: Otros ingresos}
+          - {codigo: "5",    nombre: COSTOS,                              tipo: costo,      naturaleza: deudora}
+          - {codigo: "5101", nombre: Costo de ventas,                     tipo: costo,      naturaleza: deudora,   padre: "5", rol: COSTO_VENTAS,          nombre_simple: Lo que te costó lo que vendiste}
+          - {codigo: "5102", nombre: Mermas y desperdicios,               tipo: costo,      naturaleza: deudora,   padre: "5", rol: MERMA,                 nombre_simple: Lo que se perdió o se dañó}
+          - {codigo: "6",    nombre: GASTOS,                              tipo: gasto,      naturaleza: deudora}
+          - {codigo: "6101", nombre: Alquileres,                          tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_RENTA,             nombre_simple: Renta}
+          - {codigo: "6102", nombre: "Energía eléctrica, agua y gas",     tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_SERVICIOS_BASICOS, nombre_simple: "Luz, agua y gas"}
+          - {codigo: "6103", nombre: Teléfono e internet,                 tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_COMUNICACIONES,    nombre_simple: Teléfono e internet}
+          - {codigo: "6104", nombre: Sueldos y salarios,                  tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_SUELDOS,           nombre_simple: Sueldos}
+          - {codigo: "6105", nombre: Publicidad,                          tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_PUBLICIDAD,        nombre_simple: Publicidad}
+          - {codigo: "6106", nombre: Envíos y fletes sobre ventas,        tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_ENVIOS,            nombre_simple: Envíos}
+          - {codigo: "6107", nombre: Comisiones bancarias y de pasarelas, tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_COMISIONES,        nombre_simple: Comisiones}
+          - {codigo: "6108", nombre: Software y servicios digitales,      tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_SOFTWARE,          nombre_simple: Servicios digitales}
+          - {codigo: "6109", nombre: Mantenimiento y reparaciones,        tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_MANTENIMIENTO,     nombre_simple: Reparaciones}
+          - {codigo: "6110", nombre: Transporte y combustible,            tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_TRANSPORTE,        nombre_simple: Transporte}
+          - {codigo: "6190", nombre: Gastos varios,                       tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_VARIOS,            nombre_simple: Otros gastos}
+          - {codigo: "6201", nombre: Impuesto de pequeño contribuyente,   tipo: gasto,      naturaleza: deudora,   padre: "6", rol: IMPUESTO_PEQ_CONTRIBUYENTE, nombre_simple: Impuesto sobre ventas}
+
+# Reglas: cada línea es {lado: debe|haber, rol, importe}. `rol` puede ser un rol fijo o un comodín
+# que resuelve la operación: @pago (CAJA o BANCO según el medio), @gasto (rol de la categoría) e
+# @inventario (INVENTARIO_INSUMOS o INVENTARIO_MERCADERIA). Las líneas con importe 0 se omiten.
+# Si no hay regla para el tratamiento "separado", se usa la de "sin_separar" (eventos sin IVA).
+- tabla: cont_cfg_regla_contable
+  filas:
+    - codigo: GT_VENTA_SEPARADO_V1
+      pais_codigo: GT
+      tipo_evento: VENTA
+      tratamiento_iva: separado
+      version: 1
+      vigente_desde: 2026-01-01
+      descripcion_simple: Venta con IVA incluido
+      lineas:
+        - {lado: debe,  rol: "@pago",               importe: total}
+        - {lado: haber, rol: VENTAS,                importe: base}
+        - {lado: haber, rol: IVA_DEBITO,            importe: iva}
+        - {lado: debe,  rol: COSTO_VENTAS,          importe: costo}
+        - {lado: haber, rol: INVENTARIO_INSUMOS,    importe: costo_insumos}
+        - {lado: haber, rol: INVENTARIO_MERCADERIA, importe: costo_mercaderia}
+    - codigo: GT_VENTA_SIN_SEPARAR_V1
+      pais_codigo: GT
+      tipo_evento: VENTA
+      tratamiento_iva: sin_separar
+      version: 1
+      vigente_desde: 2026-01-01
+      descripcion_simple: Venta
+      lineas:
+        - {lado: debe,  rol: "@pago",               importe: total}
+        - {lado: haber, rol: VENTAS,                importe: total}
+        - {lado: debe,  rol: COSTO_VENTAS,          importe: costo}
+        - {lado: haber, rol: INVENTARIO_INSUMOS,    importe: costo_insumos}
+        - {lado: haber, rol: INVENTARIO_MERCADERIA, importe: costo_mercaderia}
+    - codigo: GT_COMPRA_SEPARADO_V1
+      pais_codigo: GT
+      tipo_evento: COMPRA
+      tratamiento_iva: separado
+      version: 1
+      vigente_desde: 2026-01-01
+      descripcion_simple: Compra (IVA por cobrar si trae factura)
+      lineas:
+        - {lado: debe,  rol: INVENTARIO_INSUMOS,    importe: base_insumos}
+        - {lado: debe,  rol: INVENTARIO_MERCADERIA, importe: base_mercaderia}
+        - {lado: debe,  rol: IVA_CREDITO,           importe: iva}
+        - {lado: haber, rol: "@pago",               importe: total}
+    - codigo: GT_COMPRA_SIN_SEPARAR_V1
+      pais_codigo: GT
+      tipo_evento: COMPRA
+      tratamiento_iva: sin_separar
+      version: 1
+      vigente_desde: 2026-01-01
+      descripcion_simple: Compra
+      lineas:
+        - {lado: debe,  rol: INVENTARIO_INSUMOS,    importe: base_insumos}
+        - {lado: debe,  rol: INVENTARIO_MERCADERIA, importe: base_mercaderia}
+        - {lado: haber, rol: "@pago",               importe: total}
+    - codigo: GT_GASTO_SEPARADO_V1
+      pais_codigo: GT
+      tipo_evento: GASTO
+      tratamiento_iva: separado
+      version: 1
+      vigente_desde: 2026-01-01
+      descripcion_simple: Gasto (IVA por cobrar si trae factura)
+      lineas:
+        - {lado: debe,  rol: "@gasto",     importe: base}
+        - {lado: debe,  rol: IVA_CREDITO,  importe: iva}
+        - {lado: haber, rol: "@pago",      importe: total}
+    - codigo: GT_GASTO_SIN_SEPARAR_V1
+      pais_codigo: GT
+      tipo_evento: GASTO
+      tratamiento_iva: sin_separar
+      version: 1
+      vigente_desde: 2026-01-01
+      descripcion_simple: Gasto
+      lineas:
+        - {lado: debe,  rol: "@gasto",     importe: total}
+        - {lado: haber, rol: "@pago",      importe: total}
+    - codigo: GT_INVENTARIO_INICIAL_V1
+      pais_codigo: GT
+      tipo_evento: INVENTARIO_INICIAL
+      tratamiento_iva: sin_separar
+      version: 1
+      vigente_desde: 2026-01-01
+      descripcion_simple: Lo que ya tenías (aporte al negocio)
+      lineas:
+        - {lado: debe,  rol: "@inventario", importe: valor}
+        - {lado: haber, rol: CAPITAL,       importe: valor}
+    - codigo: GT_ENTRADA_INVENTARIO_V1
+      pais_codigo: GT
+      tipo_evento: ENTRADA_INVENTARIO
+      tratamiento_iva: sin_separar
+      version: 1
+      vigente_desde: 2026-01-01
+      descripcion_simple: Compra anotada en el inventario (efectivo, sin factura)
+      lineas:
+        - {lado: debe,  rol: "@inventario", importe: valor}
+        - {lado: haber, rol: CAJA,          importe: valor}
+    - codigo: GT_MERMA_V1
+      pais_codigo: GT
+      tipo_evento: MERMA
+      tratamiento_iva: sin_separar
+      version: 1
+      vigente_desde: 2026-01-01
+      descripcion_simple: Se perdió o se dañó
+      lineas:
+        - {lado: debe,  rol: MERMA,         importe: valor}
+        - {lado: haber, rol: "@inventario", importe: valor}
+    - codigo: GT_AJUSTE_FALTANTE_V1
+      pais_codigo: GT
+      tipo_evento: AJUSTE_FALTANTE
+      tratamiento_iva: sin_separar
+      version: 1
+      vigente_desde: 2026-01-01
+      descripcion_simple: Corrección del inventario (había menos)
+      lineas:
+        - {lado: debe,  rol: MERMA,         importe: valor}
+        - {lado: haber, rol: "@inventario", importe: valor}
+    - codigo: GT_AJUSTE_SOBRANTE_V1
+      pais_codigo: GT
+      tipo_evento: AJUSTE_SOBRANTE
+      tratamiento_iva: sin_separar
+      version: 1
+      vigente_desde: 2026-01-01
+      descripcion_simple: Corrección del inventario (había más)
+      lineas:
+        - {lado: debe,  rol: "@inventario",   importe: valor}
+        - {lado: haber, rol: OTROS_INGRESOS,  importe: valor}

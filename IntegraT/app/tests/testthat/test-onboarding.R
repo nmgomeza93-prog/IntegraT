@@ -66,7 +66,8 @@ test_that("crear cuenta y onboarding de un restaurante termina en su Inicio", {
   expect_true(esperar_visible(app, ".nav-inferior"))
   expect_equal(app$get_text(".app-encabezado__negocio"), "Comedor Doña Mari")
   expect_match(app$get_text(".nav-inferior__boton[data-destino='productos']"), "Menú")
-  expect_match(app$get_text("#inicio-ir_productos"), "platillo")
+  expect_true(esperar_visible(app, "#inicio-hacer_paso"))
+  expect_match(app$get_text("#inicio-hacer_paso"), "platillo")
   expect_match(app$get_text(".app-contenido"), "Agrega tus 5 platillos más vendidos")
 })
 

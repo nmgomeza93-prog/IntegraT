@@ -31,7 +31,9 @@ def test_restaurante_recibe_menu_mesas_y_su_checklist(cliente_api):
     assert "entregas" not in n["capacidades"]  # existe pero inactiva: no se lista
     textos = [p["texto"] for p in n["primeros_pasos"]]
     assert textos[0] == "Agrega tus 5 platillos más vendidos"
-    assert len(textos) == 3 and not any(p["hecho"] for p in n["primeros_pasos"])
+    assert textos[1:4] == ["Anota tus insumos principales", "Registra tu primera compra",
+                           "Dinos qué lleva tu platillo estrella"]
+    assert len(textos) == 5 and not any(p["hecho"] for p in n["primeros_pasos"])
 
 
 def test_negocio_en_linea_cambia_el_vocabulario(cliente_api):
@@ -39,7 +41,7 @@ def test_negocio_en_linea_cambia_el_vocabulario(cliente_api):
     n = crear_negocio_api(cliente_api, sesion, "Tienda de Ana", "ventas_en_linea")
     assert n["vocabulario"]["catalogo"] == "Productos"
     assert "entregas" in n["capacidades"] and "mesas" not in n["capacidades"]
-    assert n["primeros_pasos"][0]["texto"] == "Agrega tu primer producto con una foto"
+    assert n["primeros_pasos"][0]["texto"] == "Agrega tu primer producto"
 
 
 def test_la_respuesta_trae_un_acceso_atado_al_negocio(cliente_api):

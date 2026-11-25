@@ -315,3 +315,52 @@ def test_un_cajero_puede_ver_pero_no_cambiar(restaurante, bd_migrada):
                          json={"version": 1, "nombre": "Cambiado"}).status_code == 403
     assert cliente.delete(f"/v1/items/{item['id']}", headers=h).status_code == 403
     assert cliente.post("/v1/categorias", headers=h, json={"nombre": "Nueva"}).status_code == 403
+
+
+# ------------------------------------------------------------------ checklist del Inicio
+
+def _pasos_hechos(cliente, sesion_acceso, negocio_id):
+    n = cliente.get(f"/v1/negocios/{negocio_id}", headers=con_token(sesion_acceso)).json()
+    return {p["clave"]: p["hecho"] for p in n["primeros_pasos"]}
+
+
+def test_el_checklist_se_marca_solo_al_agregar_platillos(cliente_api):
+    sesion = registrar_usuario(cliente_api, "Mari")
+    negocio = crear_negocio_api(cliente_api, sesion, "Comedor Doña Mari", "restaurante")
+    h = con_token(negocio["acceso"])
+    assert _pasos_hechos(cliente_api, negocio["acceso"], negocio["id"])["cinco_platillos"] is False
+    ids = [agregar(cliente_api, h, f"Platillo {i}")["id"] for i in range(4)]
+    assert _pasos_hechos(cliente_api, negocio["acceso"], negocio["id"])["cinco_platillos"] is False
+    agregar(cliente_api, h, "Platillo 5")
+    hechos = _pasos_hechos(cliente_api, negocio["acceso"], negocio["id"])
+    assert hechos["cinco_platillos"] is True
+    assert hechos["primera_venta"] is False  # lo que aún no existe no se marca
+    # Si archiva uno, vuelve a faltar
+    cliente_api.delete(f"/v1/items/{ids[0]}", headers=h)
+    assert _pasos_hechos(cliente_api, negocio["acceso"], negocio["id"])["cinco_platillos"] is False
+
+
+def test_el_checklist_de_una_tienda_pide_un_solo_producto(cliente_api):
+    sesion = registrar_usuario(cliente_api, "Ana")
+    negocio = crear_negocio_api(cliente_api, sesion, "Tienda de Ana", "ventas_en_linea")
+    assert _pasos_hechos(cliente_api, negocio["acceso"], negocio["id"])["primer_producto"] is False
+    agregar(cliente_api, con_token(negocio["acceso"]), "Camisa")
+    assert _pasos_hechos(cliente_api, negocio["acceso"], negocio["id"])["primer_producto"] is True
+
+
+# ------------------------------------------------------------------ negocios anteriores al catálogo
+
+def test_un_restaurante_anterior_recibe_sus_categorias_la_primera_vez(restaurante, bd_migrada):
+    cliente, _, h = restaurante
+    with bd_migrada.begin() as con:
+        con.execute(sa.text("DELETE FROM ops_categoria WHERE negocio_id IN (SELECT id FROM "
+                            "(SELECT id FROM core_negocio ORDER BY creado_en DESC LIMIT 1) t)"))
+    nombres = [c["nombre"] for c in cliente.get("/v1/categorias", headers=h).json()]
+    assert nombres == ["Entradas", "Platos fuertes", "Bebidas", "Postres"]
+    assert len(cliente.get("/v1/categorias", headers=h).json()) == 4  # sin repetirlas
+
+
+def test_una_tienda_sin_categorias_sigue_sin_categorias(tienda):
+    cliente, _, h = tienda
+    assert cliente.get("/v1/categorias", headers=h).json() == []
+    assert cliente.get("/v1/categorias", headers=h).json() == []

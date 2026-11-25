@@ -8,6 +8,9 @@ from integrat.db.tablas import PREFIJOS_PERMITIDOS, metadata
 
 COLS_AUDITORIA = {"creado_en", "creado_por", "actualizado_en", "actualizado_por",
                   "eliminado_en", "eliminado_por", "version"}
+# Inmutables (CLAUDE.md): no se editan ni se borran, se corrigen con otro registro. Solo creación.
+TABLAS_INMUTABLES = {"ops_movimiento_inventario", "cont_asiento", "cont_asiento_linea"}
+COLS_INMUTABLES = {"creado_en", "creado_por"}
 
 
 def _tablas(engine) -> set[str]:
@@ -37,7 +40,8 @@ def test_convencion_de_nombres():
         assert nombre.startswith(PREFIJOS_PERMITIDOS), f"{nombre}: prefijo no permitido"
         assert nombre == nombre.lower()
         if "id" in tabla.c and tabla.c.id.primary_key:
-            faltan = COLS_AUDITORIA - set(tabla.c.keys())
+            exigidas = COLS_INMUTABLES if nombre in TABLAS_INMUTABLES else COLS_AUDITORIA
+            faltan = exigidas - set(tabla.c.keys())
             assert not faltan, f"{nombre}: faltan columnas de auditoría {faltan}"
 
 

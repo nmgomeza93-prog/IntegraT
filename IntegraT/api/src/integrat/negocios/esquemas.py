@@ -10,6 +10,8 @@ NombreNegocio = Annotated[
 ]
 # "¿Das factura?": sí / no / todavía no sé
 DaFactura = Literal["si", "no", "no_se"]
+# Régimen de IVA en palabras simples (docs/PLAN_CONTABILIDAD.md). [verificar con el contador]
+RegimenIva = Literal["general", "pequeno", "no_se"]
 
 
 class NegocioIn(BaseModel):
@@ -33,9 +35,14 @@ class NegocioOut(BaseModel):
     moneda_codigo: str
     zona_horaria: str
     da_factura: DaFactura
+    regimen_iva: RegimenIva = "no_se"
     capacidades: list[str]  # solo las activas
     vocabulario: dict[str, str]  # palabras de la interfaz según el tipo
     primeros_pasos: list[PrimerPaso]
+
+
+class ImpuestosIn(BaseModel):
+    regimen_iva: RegimenIva
 
 
 class AccesoOut(BaseModel):

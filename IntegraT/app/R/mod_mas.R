@@ -6,9 +6,10 @@ mod_mas_ui <- function(id) {
     htmltools::tags$h1(class = "pantalla__titulo", "Más"),
     htmltools::tags$ul(
       class = "lista-opciones",
-      item_lista("cash-coin", "Gastos", "Pronto", id = ns("gastos"), class = "action-button"),
-      item_lista("receipt", "Compras y proveedores", "Pronto", id = ns("compras"),
-                 class = "action-button"),
+      item_lista("cash-coin", "Gastos", id = ns("gastos"), class = "action-button"),
+      item_lista("basket", "Inventario", id = ns("inventario"), class = "action-button"),
+      item_lista("receipt", "Compras y proveedores", id = ns("compras"), class = "action-button"),
+      item_lista("bank", "Tus impuestos", id = ns("impuestos"), class = "action-button"),
       item_lista("bar-chart-line", "Informes", "Pronto", id = ns("informes"),
                  class = "action-button"),
       item_lista("shop", "Mi negocio", "Pronto", id = ns("negocio"), class = "action-button"),
@@ -32,10 +33,14 @@ mod_mas_ui <- function(id) {
   )
 }
 
-mod_mas_server <- function(id, al_salir) {
+mod_mas_server <- function(id, al_salir, ir_a) {
   shiny::moduleServer(id, function(input, output, session) {
     shiny::observeEvent(input$salir, al_salir())
-    for (opcion in c("gastos", "compras", "informes", "negocio", "ayuda")) {
+    shiny::observeEvent(input$gastos, ir_a("gastos"))
+    shiny::observeEvent(input$inventario, ir_a("inventario"))
+    shiny::observeEvent(input$compras, ir_a("compras"))
+    shiny::observeEvent(input$impuestos, ir_a("impuestos"))
+    for (opcion in c("informes", "negocio", "ayuda")) {
       local({
         o <- opcion
         shiny::observeEvent(input[[o]], aviso_pronto())

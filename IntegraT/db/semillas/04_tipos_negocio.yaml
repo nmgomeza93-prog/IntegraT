@@ -56,17 +56,20 @@
       version_plantilla: 1
       contenido:
         primeros_pasos:
-          - {clave: primer_producto, texto: "Agrega tu primer producto con una foto", icono: camera}
-          - {clave: primera_venta,   texto: "Haz tu primera venta", icono: cart}
-          - {clave: gastos_fijos,    texto: "Anota tus gastos fijos", icono: cash-coin}
+          - {clave: primer_producto, texto: "Agrega tu primer producto", icono: box-seam, regla: {items_minimo: 1}}
+          - {clave: primera_venta,   texto: "Haz tu primera venta", icono: cart, regla: {ventas_minimo: 1}}
+          - {clave: gastos_fijos,    texto: "Anota tus gastos fijos", icono: cash-coin, regla: {gastos_fijos_minimo: 1}}
+          - {clave: primera_compra,  texto: "Registra tu primera compra", icono: receipt, regla: {compras_minimo: 1}}
     - tipo_negocio_codigo: restaurante
       tipo_plantilla: onboarding
       version_plantilla: 1
       contenido:
         primeros_pasos:
-          - {clave: cinco_platillos, texto: "Agrega tus 5 platillos más vendidos", icono: journal-text}
-          - {clave: receta_estrella, texto: "Dinos qué lleva tu platillo estrella", icono: basket}
-          - {clave: primera_venta,   texto: "Haz tu primera venta", icono: cart}
+          - {clave: cinco_platillos, texto: "Agrega tus 5 platillos más vendidos", icono: journal-text, regla: {items_minimo: 5}}
+          - {clave: primeros_insumos, texto: "Anota tus insumos principales", icono: basket, regla: {insumos_minimo: 1}}
+          - {clave: primera_compra,  texto: "Registra tu primera compra", icono: receipt, regla: {compras_minimo: 1}}
+          - {clave: receta_estrella, texto: "Dinos qué lleva tu platillo estrella", icono: basket, regla: {recetas_minimo: 1}}
+          - {clave: primera_venta,   texto: "Haz tu primera venta", icono: cart, regla: {ventas_minimo: 1}}
     - tipo_negocio_codigo: ventas_en_linea
       tipo_plantilla: catalogo
       version_plantilla: 1

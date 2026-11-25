@@ -40,6 +40,7 @@
   font-weight: 600;
   margin-bottom: var(--esp-1);
 }
+.campo .form-select,
 .campo .form-control {
   min-height: var(--toque-minimo);
   font-size: 1rem; /* 16 px: evita el zoom automático de iOS */

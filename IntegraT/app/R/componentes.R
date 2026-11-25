@@ -100,6 +100,18 @@ item_lista <- function(icono_nombre, texto, extra = NULL, ...) {
   )
 }
 
+# Fila de solo lectura para las listas (no es un botón): icono, texto y un dato a la derecha.
+fila_lista <- function(icono_nombre, texto, extra = NULL) {
+  htmltools::tags$li(
+    htmltools::tags$div(
+      class = "lista-opciones__item lista-opciones__item--fija",
+      icono(icono_nombre),
+      htmltools::tags$span(class = "lista-opciones__texto", texto),
+      if (!is.null(extra)) htmltools::tags$span(class = "lista-opciones__extra", extra)
+    )
+  )
+}
+
 # Formato de dinero: "Q 1,245.00"
 formato_dinero <- function(valor, simbolo = "Q") {
   paste0(simbolo, " ", formatC(valor, format = "f", digits = 2, big.mark = ","))
@@ -131,10 +143,12 @@ mensaje_error <- function(texto) {
                     htmltools::tags$span(texto))
 }
 
-enlace_atras <- function(id, texto = "Atrás") {
+enlace_accion <- function(id, texto, icono_nombre) {
   htmltools::tags$button(id = id, type = "button", class = "enlace-boton action-button",
-                         icono("arrow-left"), htmltools::tags$span(texto))
+                         icono(icono_nombre), htmltools::tags$span(texto))
 }
+
+enlace_atras <- function(id, texto = "Atrás") enlace_accion(id, texto, "arrow-left")
 
 # Opción grande y táctil: al tocarla manda `valor` al input `input_id` (ya con namespace).
 opcion_grande <- function(input_id, valor, icono_nombre, titulo, detalle = NULL, activa = FALSE) {

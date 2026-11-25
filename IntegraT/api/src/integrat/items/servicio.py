@@ -22,6 +22,7 @@ from integrat.db.tablas import (
     ops_item_variante,
 )
 from integrat.db.tipos import ahora_utc, uuid7
+from integrat.insumos import mercaderia
 from integrat.items.esquemas import (
     CategoriaCambios,
     CategoriaIn,
@@ -164,6 +165,26 @@ def archivar_categoria(con: Connection, ctx: ais.ContextoNegocio, categoria_id: 
         .values(categoria_id=None, actualizado_por=ctx.usuario_id,
                 version=ops_item.c.version + 1)
     )
+
+
+def asegurar_categorias_de_ejemplo(con: Connection, ctx: ais.ContextoNegocio) -> None:
+    """Negocios creados antes del catálogo: la primera vez reciben las categorías de ejemplo.
+
+    Solo si nunca tuvieron una (ni siquiera archivada). Se bloquea la fila del negocio para que
+    dos peticiones a la vez no las siembren dos veces.
+    """
+    con.execute(sa.select(core_negocio.c.id).where(core_negocio.c.id == ctx.negocio_id)
+                .with_for_update())
+    hay = con.execute(
+        ais.seleccionar(ctx, ops_categoria, ops_categoria.c.id, incluir_eliminados=True)
+        .limit(1).with_for_update()
+    ).first()
+    if hay is not None:
+        return
+    tipo = con.execute(
+        sa.select(core_negocio.c.tipo_negocio_codigo).where(core_negocio.c.id == ctx.negocio_id)
+    ).scalar_one()
+    sembrar_catalogo(con, ctx, tipo)
 
 
 def sembrar_catalogo(con: Connection, ctx: ais.ContextoNegocio, tipo_negocio: str) -> None:
@@ -383,3 +404,4 @@ def archivar_item(con: Connection, ctx: ais.ContextoNegocio, item_id: uuid.UUID)
         ais.actualizar(ctx, ops_item_variante, ops_item_variante.c.item_id == item_id)
         .values(eliminado_en=ahora, eliminado_por=ctx.usuario_id)
     )
+    mercaderia.desactivar_en_cascada(con, ctx, item_id)  # su insumo ligado y su receta
