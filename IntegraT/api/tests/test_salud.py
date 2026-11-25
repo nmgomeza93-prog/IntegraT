@@ -36,7 +36,7 @@ def test_salud_ok_con_base_migrada(cliente, bd_migrada):
     cuerpo = r.json()
     assert cuerpo["estado"] == "ok"
     assert cuerpo["bd"]["conectada"] is True
-    assert cuerpo["bd"]["migracion"] == "0013"
+    assert cuerpo["bd"]["migracion"] == "0014"
     assert cuerpo["bd"]["latencia_ms"] >= 0
 
 

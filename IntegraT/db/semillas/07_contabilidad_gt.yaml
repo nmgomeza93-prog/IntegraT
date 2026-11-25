@@ -36,6 +36,7 @@
     - {codigo: GASTO_TRANSPORTE,        naturaleza: deudora,   descripcion_simple: Transporte}
     - {codigo: GASTO_VARIOS,            naturaleza: deudora,   descripcion_simple: Otros gastos}
     - {codigo: IMPUESTO_PEQ_CONTRIBUYENTE, naturaleza: deudora, descripcion_simple: Impuesto sobre ventas}
+    - {codigo: DIFERENCIA_CAJA,         naturaleza: deudora,   descripcion_simple: Faltantes de caja}
 
 # Cada cuenta: codigo, nombre, nombre_simple, tipo, naturaleza, padre (código) y rol (opcional).
 # Solo las cuentas sin hijas aceptan movimientos. Las dos plantillas solo difieren en la cuenta
@@ -44,7 +45,7 @@
   filas:
     - pais_codigo: GT
       tipo_negocio_codigo: ventas_en_linea
-      version: 1
+      version: 2  # v2: + 6191 Faltantes de caja
       contenido:
         cuentas:
           - {codigo: "1",    nombre: ACTIVO,                              tipo: activo,     naturaleza: deudora}
@@ -84,10 +85,11 @@
           - {codigo: "6109", nombre: Mantenimiento y reparaciones,        tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_MANTENIMIENTO,     nombre_simple: Reparaciones}
           - {codigo: "6110", nombre: Transporte y combustible,            tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_TRANSPORTE,        nombre_simple: Transporte}
           - {codigo: "6190", nombre: Gastos varios,                       tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_VARIOS,            nombre_simple: Otros gastos}
+          - {codigo: "6191", nombre: Faltantes de caja,                   tipo: gasto,      naturaleza: deudora,   padre: "6", rol: DIFERENCIA_CAJA,         nombre_simple: Diferencias de caja}
           - {codigo: "6201", nombre: Impuesto de pequeño contribuyente,   tipo: gasto,      naturaleza: deudora,   padre: "6", rol: IMPUESTO_PEQ_CONTRIBUYENTE, nombre_simple: Impuesto sobre ventas}
     - pais_codigo: GT
       tipo_negocio_codigo: restaurante
-      version: 1
+      version: 2  # v2: + 6191 Faltantes de caja
       contenido:
         cuentas:
           - {codigo: "1",    nombre: ACTIVO,                              tipo: activo,     naturaleza: deudora}
@@ -127,6 +129,7 @@
           - {codigo: "6109", nombre: Mantenimiento y reparaciones,        tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_MANTENIMIENTO,     nombre_simple: Reparaciones}
           - {codigo: "6110", nombre: Transporte y combustible,            tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_TRANSPORTE,        nombre_simple: Transporte}
           - {codigo: "6190", nombre: Gastos varios,                       tipo: gasto,      naturaleza: deudora,   padre: "6", rol: GASTO_VARIOS,            nombre_simple: Otros gastos}
+          - {codigo: "6191", nombre: Faltantes de caja,                   tipo: gasto,      naturaleza: deudora,   padre: "6", rol: DIFERENCIA_CAJA,         nombre_simple: Diferencias de caja}
           - {codigo: "6201", nombre: Impuesto de pequeño contribuyente,   tipo: gasto,      naturaleza: deudora,   padre: "6", rol: IMPUESTO_PEQ_CONTRIBUYENTE, nombre_simple: Impuesto sobre ventas}
 
 # Reglas: cada línea es {lado: debe|haber, rol, importe}. `rol` puede ser un rol fijo o un comodín
@@ -255,4 +258,44 @@
       descripcion_simple: Corrección del inventario (había más)
       lineas:
         - {lado: debe,  rol: "@inventario",   importe: valor}
+        - {lado: haber, rol: OTROS_INGRESOS,  importe: valor}
+    - codigo: GT_APORTE_DUENO_V1
+      pais_codigo: GT
+      tipo_evento: APORTE_DUENO
+      tratamiento_iva: sin_separar
+      version: 1
+      vigente_desde: 2026-01-01
+      descripcion_simple: El dueño puso dinero en el negocio
+      lineas:
+        - {lado: debe,  rol: "@pago",   importe: valor}
+        - {lado: haber, rol: CAPITAL,   importe: valor}
+    - codigo: GT_RETIRO_DUENO_V1
+      pais_codigo: GT
+      tipo_evento: RETIRO_DUENO
+      tratamiento_iva: sin_separar
+      version: 1
+      vigente_desde: 2026-01-01
+      descripcion_simple: El dueño sacó dinero para él (no es gasto)
+      lineas:
+        - {lado: debe,  rol: RETIROS_PROPIETARIO, importe: valor}
+        - {lado: haber, rol: "@pago",             importe: valor}
+    - codigo: GT_FALTANTE_CAJA_V1
+      pais_codigo: GT
+      tipo_evento: FALTANTE_CAJA
+      tratamiento_iva: sin_separar
+      version: 1
+      vigente_desde: 2026-01-01
+      descripcion_simple: Faltó efectivo al cerrar la caja
+      lineas:
+        - {lado: debe,  rol: DIFERENCIA_CAJA, importe: valor}
+        - {lado: haber, rol: CAJA,            importe: valor}
+    - codigo: GT_SOBRANTE_CAJA_V1
+      pais_codigo: GT
+      tipo_evento: SOBRANTE_CAJA
+      tratamiento_iva: sin_separar
+      version: 1
+      vigente_desde: 2026-01-01
+      descripcion_simple: Sobró efectivo al cerrar la caja
+      lineas:
+        - {lado: debe,  rol: CAJA,            importe: valor}
         - {lado: haber, rol: OTROS_INGRESOS,  importe: valor}

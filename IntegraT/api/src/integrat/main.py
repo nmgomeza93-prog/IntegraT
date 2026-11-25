@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import integrat
 from integrat.auth.router import router as router_auth
+from integrat.caja.router import router as router_caja
 from integrat.catalogos.router import router as router_catalogos
 from integrat.compras.router import router as router_compras
 from integrat.config import config_app
@@ -52,7 +53,7 @@ def crear_app() -> FastAPI:
         )
     for router in (router_salud, router_auth, router_catalogos, router_negocios, router_items,
                    router_ventas, router_gastos, router_insumos, router_compras,
-                   router_contabilidad):
+                   router_contabilidad, router_caja):
         app.include_router(router, prefix=PREFIJO)
     return app
 

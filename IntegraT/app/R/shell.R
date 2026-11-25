@@ -23,6 +23,8 @@ shell_ui <- function(negocio) {
         bslib::nav_panel_hidden("inventario", mod_inventario_ui("inventario")),
         bslib::nav_panel_hidden("compras", mod_compras_ui("compras")),
         bslib::nav_panel_hidden("impuestos", mod_impuestos_ui("impuestos")),
+        bslib::nav_panel_hidden("caja", mod_caja_ui("caja")),
+        bslib::nav_panel_hidden("dueno", mod_dueno_ui("dueno")),
         bslib::nav_panel_hidden("mas", mod_mas_ui("mas"))
       )
     ),

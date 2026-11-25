@@ -67,6 +67,9 @@ server <- function(input, output, session) {
     if (identical(input$accion_rapida, "registrar_gasto")) {
       s$abrir_gasto <- isolate(s$abrir_gasto) + 1L  # abre el formulario de gastos
       ir_a("gastos")
+    } else if (identical(input$accion_rapida, "cerrar_dia")) {
+      s$abrir_cierre <- isolate(s$abrir_cierre) + 1L  # va a contar el efectivo (o a abrir)
+      ir_a("caja")
     } else if (identical(input$accion_rapida, "registrar_compra")) {
       s$abrir_compra <- isolate(s$abrir_compra) + 1L  # abre el formulario de compras
       ir_a("compras")
@@ -97,6 +100,8 @@ server <- function(input, output, session) {
   mod_inventario_server("inventario", s, ir_a)
   mod_compras_server("compras", s, ir_a)
   mod_impuestos_server("impuestos", s, ir_a)
+  mod_caja_server("caja", s, ir_a, seccion = reactive(input$seccion))
+  mod_dueno_server("dueno", s, ir_a)
   mod_mas_server("mas", salir, ir_a)
 }
 

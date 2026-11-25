@@ -604,6 +604,49 @@ ops_compra_linea = sa.Table(
     **OPCIONES_TABLA,
 )
 
+ops_sesion_caja = sa.Table(
+    "ops_sesion_caja", metadata,
+    col_id(),
+    _fk("negocio_id", UUIDBinario(), "core_negocio.id"),
+    sa.Column("fecha", sa.Date(), nullable=False, comment="Día de la apertura (calendario local)"),
+    sa.Column("abierta_en", FechaHora, nullable=False, comment="UTC"),
+    sa.Column("monto_apertura", sa.Numeric(14, 2), nullable=False),
+    sa.Column("estado", sa.String(10), nullable=False, server_default="abierta"),
+    sa.Column("cerrada_en", FechaHora, nullable=True),
+    sa.Column("cerrada_por", UUIDBinario(), nullable=True),
+    sa.Column("efectivo_esperado", sa.Numeric(14, 2), nullable=True),
+    sa.Column("efectivo_contado", sa.Numeric(14, 2), nullable=True),
+    sa.Column("diferencia", sa.Numeric(14, 2), nullable=True, comment="contado - esperado"),
+    sa.Column("nota", sa.String(200), nullable=True),
+    *cols_auditoria(),
+    sa.CheckConstraint("estado IN ('abierta','cerrada')", name="estado"),
+    sa.CheckConstraint("monto_apertura >= 0", name="monto_apertura"),
+    sa.CheckConstraint("efectivo_contado IS NULL OR efectivo_contado >= 0",
+                       name="efectivo_contado"),
+    sa.Index(None, "negocio_id", "estado"),
+    sa.Index(None, "negocio_id", "fecha"),
+    comment="Caja del día: apertura y cierre",
+    **OPCIONES_TABLA,
+)
+
+ops_movimiento_dueno = sa.Table(
+    "ops_movimiento_dueno", metadata,
+    col_id(),
+    _fk("negocio_id", UUIDBinario(), "core_negocio.id"),
+    sa.Column("tipo", sa.String(10), nullable=False),
+    sa.Column("monto", sa.Numeric(14, 2), nullable=False),
+    sa.Column("medio", sa.String(10), nullable=False),
+    sa.Column("fecha", sa.Date(), nullable=False, comment="Calendario local"),
+    sa.Column("nota", sa.String(200), nullable=True),
+    *cols_auditoria(),
+    sa.CheckConstraint("tipo IN ('aporte','retiro')", name="tipo"),
+    sa.CheckConstraint("medio IN ('efectivo','banco')", name="medio"),
+    sa.CheckConstraint("monto > 0", name="monto"),
+    sa.Index(None, "negocio_id", "fecha"),
+    comment="Dinero que el dueño pone o saca del negocio",
+    **OPCIONES_TABLA,
+)
+
 # ---------------------------------------------------------------- cont_ (contabilidad)
 
 cont_cfg_rol_cuenta = sa.Table(

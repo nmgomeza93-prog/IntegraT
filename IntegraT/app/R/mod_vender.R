@@ -19,7 +19,9 @@ total_lineas <- function(lineas) {
 }
 
 # Hora local de una fecha ISO en UTC ("2026-11-24T20:01:03.75Z") -> "14:01".
+# (También la usa la Caja del día.)
 hora_local <- function(iso, zona = ZONA_HORARIA_DEFECTO) {
+  if (is.null(iso)) return("")
   limpio <- sub("(Z|[+]00:00)$", "", sub("[.][0-9]+", "", iso))
   momento <- as.POSIXct(limpio, format = "%Y-%m-%dT%H:%M:%S", tz = "UTC")
   format(momento, "%H:%M", tz = zona)

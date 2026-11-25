@@ -24,6 +24,8 @@
 #   un error (para probar el reintento con la misma clave)
 # Impuestos y resultados: PUT /v1/negocios/{id}/impuestos guarda el régimen (empieza en "no_se");
 #   GET /v1/resultados resume ventas pagadas menos gastos (sin IVA en el régimen general).
+# Caja (/v1/caja) y dueño (/v1/dueno): en memoria; el efectivo esperado es la apertura más las
+#   ventas en efectivo cobradas desde que se abrió.
 
 iniciar_api_falsa <- function(env = parent.frame()) {
   puerto <- httpuv::randomPort()
@@ -97,6 +99,29 @@ iniciar_api_falsa <- function(env = parent.frame()) {
            vocabulario = vocab[[tipo]], primeros_pasos = pasos_al_dia(tipo))
     }
     estado$regimen <- "no_se"
+    estado$caja <- NULL          # la sesión abierta
+    estado$cierres <- list()
+    estado$cierres_hechos <- 0L
+    estado$claves_cierre <- list()
+    estado$dueno <- list()
+    estado$claves_dueno <- list()
+    resumen_vacio <- function() list(ventas = "0.00", gastos = "0.00", compras = "0.00",
+                                     inventario = "0.00", dueno = "0.00", otros = "0.00",
+                                     cantidad_ventas = 0L, ventas_tarjeta = "0.00",
+                                     ventas_transferencia = "0.00")
+    # Caja en vivo, versión simple: apertura + ventas en efectivo pagadas desde que se abrió.
+    caja_en_vivo <- function(c) {
+      ventas <- Filter(function(v) identical(v$estado, "pagada") && identical(v$medio_pago, "efectivo") &&
+                         (v$creada_n %||% 0L) > c$ventas_al_abrir, estado$ventas)
+      monto <- sum(vapply(ventas, function(v) as.numeric(v$total), 0))
+      r <- resumen_vacio()
+      r$ventas <- sprintf("%.2f", monto)
+      r$cantidad_ventas <- length(ventas)
+      c$resumen <- r
+      c$efectivo_esperado <- sprintf("%.2f", as.numeric(c$monto_apertura) + monto)
+      c$ventas_al_abrir <- NULL
+      c
+    }
     estado$resultados_llamadas <- 0L
     estado$creados <- 0L
     estado$salidas <- 0L
@@ -277,6 +302,9 @@ iniciar_api_falsa <- function(env = parent.frame()) {
                               anulaciones_compra = estado$anulaciones_compra,
                               proveedores = length(estado$proveedores),
                               regimen = estado$regimen,
+                              cierres = estado$cierres_hechos,
+                              caja_abierta = !is.null(estado$caja),
+                              dueno = length(estado$dueno),
                               gastos_con_factura = sum(vapply(estado$gastos,
                                 function(g) isTRUE(g$con_factura), NA)),
                               resultados = estado$resultados_llamadas,
@@ -379,6 +407,79 @@ iniciar_api_falsa <- function(env = parent.frame()) {
         estado$regimen <- d$regimen_iva
         # La API real responde 204; aquí 200 con {} porque un 204 de httpuv sin cuerpo deja
         # la conexión en mal estado para la siguiente petición (para la app, ambos son "ok").
+        return(json(200, list()))
+      }
+      if (ruta == "/v1/caja" && metodo == "GET") {
+        ultimo <- if (length(estado$cierres) > 0) estado$cierres[[1]] else NULL
+        abierta <- if (is.null(estado$caja)) NULL else caja_en_vivo(estado$caja)
+        return(json(200, list(abierta = abierta, ultimo_cierre = ultimo)))
+      }
+      if (ruta == "/v1/caja/abrir" && metodo == "POST") {
+        d <- leer(req)
+        if (!is.null(estado$caja)) return(json(409, list(detail = "La caja ya está abierta.")))
+        monto <- suppressWarnings(as.numeric(d$monto_apertura))
+        if (is.na(monto) || monto < 0) return(json(422, list(detail = "Revisa los datos e intenta de nuevo.")))
+        estado$caja <- list(id = paste0("caja-", estado$cierres_hechos + 1L),
+                            fecha = format(Sys.Date()),
+                            abierta_en = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+                            monto_apertura = sprintf("%.2f", monto), estado = "abierta",
+                            efectivo_contado = NULL, diferencia = NULL, cerrada_en = NULL,
+                            nota = NULL, ventas_al_abrir = estado$ventas_creadas)
+        return(json(201, caja_en_vivo(estado$caja)))
+      }
+      if (ruta == "/v1/caja/cerrar" && metodo == "POST") {
+        d <- leer(req)
+        clave <- req$HTTP_IDEMPOTENCY_KEY %||% NULL
+        if (!is.null(clave) && !is.null(estado$claves_cierre[[clave]])) {
+          return(json(200, estado$claves_cierre[[clave]]))
+        }
+        if (is.null(estado$caja)) return(json(409, list(detail = "La caja no está abierta. Ábrela primero.")))
+        c <- caja_en_vivo(estado$caja)
+        contado <- as.numeric(d$efectivo_contado)
+        c$estado <- "cerrada"
+        c$efectivo_contado <- sprintf("%.2f", contado)
+        c$diferencia <- sprintf("%.2f", contado - as.numeric(c$efectivo_esperado))
+        c$cerrada_en <- format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
+        c$nota <- d$nota
+        estado$caja <- NULL
+        estado$cierres <- c(list(c), estado$cierres)
+        estado$cierres_hechos <- estado$cierres_hechos + 1L
+        if (!is.null(clave)) estado$claves_cierre[[clave]] <- c
+        return(json(200, c))
+      }
+      if (ruta == "/v1/caja/cierres" && metodo == "GET") {
+        return(json(200, list(mes = format(Sys.Date(), "%Y-%m"), cierres = estado$cierres)))
+      }
+      if (ruta == "/v1/dueno" && metodo == "GET") {
+        movs <- rev(unname(estado$dueno))
+        total <- function(t) sprintf("%.2f", sum(vapply(Filter(function(m) m$tipo == t, movs),
+                                                       function(m) as.numeric(m$monto), 0)))
+        return(json(200, list(mes = format(Sys.Date(), "%Y-%m"), total_aportes = total("aporte"),
+                              total_retiros = total("retiro"), movimientos = movs)))
+      }
+      if (ruta == "/v1/dueno" && metodo == "POST") {
+        d <- leer(req)
+        monto <- suppressWarnings(as.numeric(d$monto))
+        if (!(d$tipo %||% "") %in% c("aporte", "retiro") || is.na(monto) || monto <= 0 ||
+            !(d$medio %||% "") %in% c("efectivo", "banco")) {
+          return(json(422, list(detail = "Revisa los datos e intenta de nuevo.")))
+        }
+        Sys.sleep(0.4)  # para que un doble toque llegue antes de terminar
+        clave <- req$HTTP_IDEMPOTENCY_KEY %||% NULL
+        if (!is.null(clave) && !is.null(estado$claves_dueno[[clave]])) {
+          return(json(201, estado$claves_dueno[[clave]]))
+        }
+        m <- list(id = paste0("d-", length(estado$dueno) + 1L), tipo = d$tipo,
+                  monto = sprintf("%.2f", monto), medio = d$medio,
+                  fecha = d$fecha %||% format(Sys.Date()), nota = d$nota)
+        estado$dueno[[m$id]] <- m
+        if (!is.null(clave)) estado$claves_dueno[[clave]] <- m
+        return(json(201, m))
+      }
+      if (startsWith(ruta, "/v1/dueno/") && metodo == "DELETE") {
+        id <- sub("^/v1/dueno/", "", ruta)
+        if (is.null(estado$dueno[[id]])) return(json(404, list(detail = "No encontramos ese movimiento.")))
+        estado$dueno[[id]] <- NULL
         return(json(200, list()))
       }
       # Resultados del mes: versión simple de lo que calcula la API real desde los asientos
@@ -771,7 +872,8 @@ iniciar_api_falsa <- function(env = parent.frame()) {
           id = paste0("v-", estado$ventas_creadas), numero = length(estado$ventas) + 1L,
           fecha_hora = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
           estado = "pagada", total = sprintf("%.2f", total), moneda_codigo = "GTQ",
-          medio_pago = d$medio_pago, lineas = armadas, anulada_en = NULL, motivo_anulacion = NULL)
+          medio_pago = d$medio_pago, lineas = armadas, anulada_en = NULL, motivo_anulacion = NULL,
+          creada_n = estado$ventas_creadas)
         # Los insumos de las recetas se descuentan; si alguno se acaba, se avisa (la venta se cobra)
         sin_existencia <- character()
         for (l in lineas) {

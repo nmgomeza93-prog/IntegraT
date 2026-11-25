@@ -8,6 +8,7 @@ sesion_nueva <- function() {
     catalogo_v = 0L,  # sube cada vez que cambia el catálogo (para que Vender lo recargue)
     abrir_gasto = 0L,  # sube cuando se pide "Registrar gasto" desde las acciones rápidas
     abrir_compra = 0L,  # ídem para "Registrar compra"
+    abrir_cierre = 0L,  # ídem para "Cerrar el día"
     cuentas_v = 0L,  # sube cuando cambia algo que mueve las cuentas (para el resumen del Inicio)
     regimen_iva = NULL  # el régimen elegido en "Tus impuestos" (si no, el del negocio)
   )
@@ -32,6 +33,7 @@ sesion_cerrar <- function(s) {
   s$catalogo_v <- 0L
   s$abrir_gasto <- 0L
   s$abrir_compra <- 0L
+  s$abrir_cierre <- 0L
   s$cuentas_v <- 0L
   s$regimen_iva <- NULL
   invisible(s)

@@ -102,8 +102,7 @@ def separar_iva(total: Decimal, trat: Tratamiento, aplica: bool = True) -> tuple
 
 # ------------------------------------------------------------------ plan de cuentas
 
-def _sembrar_plan(con: Connection, ctx: ais.ContextoNegocio) -> int:
-    """Copia al negocio la plantilla del plan de cuentas de su país y tipo. Devuelve la versión."""
+def _plantilla(con: Connection, ctx: ais.ContextoNegocio):
     negocio = con.execute(
         sa.select(core_negocio.c.pais_codigo, core_negocio.c.tipo_negocio_codigo)
         .where(core_negocio.c.id == ctx.negocio_id)
@@ -117,10 +116,26 @@ def _sembrar_plan(con: Connection, ctx: ais.ContextoNegocio) -> int:
     ).first()
     if plantilla is None:
         raise CuentaFaltante("No hay plantilla de plan de cuentas para este negocio.")
+    return plantilla
+
+
+def _sembrar_plan(con: Connection, ctx: ais.ContextoNegocio, plantilla=None) -> int:
+    """Copia al negocio las cuentas de la plantilla que aún no tiene. Devuelve la versión.
+
+    Sirve para el plan nuevo y para ponerlo al día cuando la plantilla sube de versión: las
+    cuentas que el negocio ya tiene (por código) no se tocan, aunque el contador las haya cambiado.
+    """
+    plantilla = plantilla or _plantilla(con, ctx)
     cuentas = plantilla.contenido.get("cuentas", [])
     padres = {c["padre"] for c in cuentas if c.get("padre")}
-    ids: dict[str, uuid.UUID] = {}
+    ids: dict[str, uuid.UUID] = {
+        f.codigo: f.id for f in con.execute(
+            ais.seleccionar(ctx, cont_cuenta_contable, cont_cuenta_contable.c.codigo,
+                            cont_cuenta_contable.c.id, incluir_eliminados=True))
+    }
     for c in cuentas:  # la plantilla lista cada cuenta después de su padre
+        if c["codigo"] in ids:
+            continue
         ids[c["codigo"]] = uuid7()
         con.execute(ais.insertar(ctx, cont_cuenta_contable, {
             "id": ids[c["codigo"]], "codigo": c["codigo"], "nombre": c["nombre"],
@@ -143,6 +158,7 @@ def abrir_libro(con: Connection, ctx: ais.ContextoNegocio):
     Primero se mira sin bloquear: si el libro existe, se bloquea solo su fila. Si no existe, se
     serializa por la fila del negocio ANTES de buscarlo con bloqueo, porque dos búsquedas con
     bloqueo de una fila inexistente se traban entre sí al insertar (candados de "hueco").
+    Si la plantilla subió de versión, el plan recibe las cuentas nuevas (bajo el mismo bloqueo).
     """
     consulta = ais.seleccionar(ctx, cont_libro, cont_libro.c.id, cont_libro.c.ultimo_numero,
                                cont_libro.c.plan_version)
@@ -152,8 +168,9 @@ def abrir_libro(con: Connection, ctx: ais.ContextoNegocio):
         if con.execute(consulta.with_for_update()).first() is None:
             crear_libro(con, ctx)
     libro = con.execute(consulta.with_for_update()).one()
-    if libro.plan_version is None:  # no debería pasar: el plan se siembra junto con el libro
-        version = _sembrar_plan(con, ctx)
+    plantilla = _plantilla(con, ctx)
+    if libro.plan_version is None or libro.plan_version < plantilla.version:
+        version = _sembrar_plan(con, ctx, plantilla)
         con.execute(ais.actualizar(ctx, cont_libro, cont_libro.c.id == libro.id)
                     .values(plan_version=version))
     return libro
@@ -173,6 +190,12 @@ def _cuentas_por_rol(con: Connection, ctx: ais.ContextoNegocio,
     if faltan:
         raise CuentaFaltante(f"Faltan cuentas para los roles {sorted(faltan)}.")
     return cuentas
+
+
+def cuenta_de_rol(con: Connection, ctx: ais.ContextoNegocio, rol: str) -> uuid.UUID:
+    """La cuenta de movimiento del plan del negocio para un rol (ej. CAJA)."""
+    abrir_libro(con, ctx)  # negocios anteriores a la contabilidad: siembra su plan
+    return _cuentas_por_rol(con, ctx, {rol})[rol]
 
 
 # ------------------------------------------------------------------ reglas

@@ -259,8 +259,9 @@ test_that("el checklist del Inicio se marca solo al agregar el primer producto",
   crear_cuenta_y_negocio(app, tipo = "ventas_en_linea", nombre_negocio = "Tienda de Ana")
 
   hechos <- "document.querySelectorAll('.app-contenido .checklist__item--hecho').length"
+  # El Inicio pide también "Tu mes" a la API: se espera a que el consejo esté dibujado.
+  expect_true(esperar_texto(app, ".tarjeta-consejo", "Agrega tu primer producto"))
   expect_equal(app$get_js(hechos), 0L)
-  expect_match(app$get_text(".tarjeta-consejo"), "Agrega tu primer producto")
   expect_match(app$get_text("#inicio-hacer_paso"), "Agregar un producto")
 
   app$click(selector = "#inicio-hacer_paso")  # lleva directo al catálogo
@@ -273,7 +274,7 @@ test_that("el checklist del Inicio se marca solo al agregar el primer producto",
 
   app$click(selector = ".nav-inferior__boton[data-destino='inicio']")
   expect_true(esperar_js(app, paste0(hechos, " === 1")))
-  expect_match(app$get_text(".tarjeta-consejo"), "Haz tu primera venta")  # el siguiente paso
+  expect_true(esperar_texto(app, ".tarjeta-consejo", "Haz tu primera venta"))  # el siguiente paso
   expect_match(app$get_text("#inicio-hacer_paso"), "Ir a vender")
 })
 
@@ -293,8 +294,8 @@ test_that("el checklist del restaurante pide 5 platillos y avisa hasta completar
     expect_true(esperar_texto(app, ".catalogo", n))
   }
   app$click(selector = ".nav-inferior__boton[data-destino='inicio']")
+  expect_true(esperar_texto(app, ".tarjeta-consejo", "5 platillos"))
   expect_equal(app$get_js(hechos), 0L)  # 4 de 5: todavía no
-  expect_match(app$get_text(".tarjeta-consejo"), "5 platillos")
 
   ir_a_catalogo(app)
   app$click(selector = "#productos-nuevo")
@@ -305,5 +306,7 @@ test_that("el checklist del restaurante pide 5 platillos y avisa hasta completar
   app$click(selector = ".nav-inferior__boton[data-destino='inicio']")
   expect_true(esperar_js(app, paste0(hechos, " >= 1")))
   # El siguiente paso pendiente pasa a ser el de la receta o la venta
-  expect_false(grepl("5 platillos", app$get_text(".tarjeta-consejo")))
+  expect_true(esperar_js(app, paste0(
+    "(document.querySelector('.tarjeta-consejo') || {}).textContent !== undefined && ",
+    "!document.querySelector('.tarjeta-consejo').textContent.includes('5 platillos')")))
 })

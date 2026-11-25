@@ -175,3 +175,36 @@ def asentar_movimiento(con: Connection, ctx: ais.ContextoNegocio, movimiento_id:
 def bases_vacias() -> dict[str, Decimal]:
     return {INVENTARIO_INSUMOS: Decimal("0"), INVENTARIO_MERCADERIA: Decimal("0")}
 
+
+
+# ------------------------------------------------------------------ dueño y caja
+
+ORIGEN_DUENO = "dueno"
+ORIGEN_CAJA = "caja"
+ROL_POR_MEDIO_DUENO = {"efectivo": "CAJA", "banco": "BANCO"}
+
+
+def asentar_dueno(con: Connection, ctx: ais.ContextoNegocio, movimiento_id: uuid.UUID, *,
+                  tipo: str, monto: Decimal, medio: str, fecha: date) -> None:
+    evento, texto = (("APORTE_DUENO", "Pusiste dinero en el negocio") if tipo == "aporte"
+                     else ("RETIRO_DUENO", "Sacaste dinero para ti"))
+    motor.registrar(con, ctx, evento=evento, fecha=fecha, descripcion=texto,
+                    importes={"valor": centavos(monto)},
+                    comodines={"@pago": ROL_POR_MEDIO_DUENO[medio]},
+                    origen_tipo=ORIGEN_DUENO, origen_id=movimiento_id)
+
+
+def revertir_dueno(con: Connection, ctx: ais.ContextoNegocio, movimiento_id: uuid.UUID) -> None:
+    motor.revertir_origen(con, ctx, ORIGEN_DUENO, movimiento_id, "Movimiento del dueño borrado")
+
+
+def asentar_diferencia_caja(con: Connection, ctx: ais.ContextoNegocio, sesion_id: uuid.UUID,
+                            diferencia: Decimal) -> None:
+    """Faltante (diferencia < 0) o sobrante (> 0) al cerrar la caja. Sin diferencia, nada."""
+    if diferencia == 0:
+        return
+    evento, texto = (("FALTANTE_CAJA", "Faltó efectivo al cerrar la caja") if diferencia < 0
+                     else ("SOBRANTE_CAJA", "Sobró efectivo al cerrar la caja"))
+    motor.registrar(con, ctx, evento=evento, fecha=hoy_del_negocio(con, ctx), descripcion=texto,
+                    importes={"valor": centavos(abs(diferencia))},
+                    origen_tipo=ORIGEN_CAJA, origen_id=sesion_id)
