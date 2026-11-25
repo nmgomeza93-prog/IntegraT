@@ -5,6 +5,7 @@ Ejecutar en desarrollo (desde api/):
 """
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 import integrat
@@ -15,6 +16,7 @@ from integrat.clientes.router import router as router_clientes
 from integrat.compras.router import router as router_compras
 from integrat.config import config_app
 from integrat.contabilidad.router import router as router_contabilidad
+from integrat.errores import manejar_validacion
 from integrat.gastos.router import router as router_gastos
 from integrat.importaciones.router import router as router_importaciones
 from integrat.insumos.router import router as router_insumos
@@ -44,6 +46,7 @@ def crear_app() -> FastAPI:
         redoc_url=None,
     )
     app.add_middleware(LimiteCuerpo, maximo=cfg.api_max_cuerpo_kb * 1024)
+    app.add_exception_handler(RequestValidationError, manejar_validacion)
     # CORS solo si se configuran orígenes: quien llama a la API es el servidor de Shiny, no el
     # navegador, así que en el piloto API_ALLOWED_ORIGINS debe quedar vacío.
     origenes = cfg.origenes_permitidos

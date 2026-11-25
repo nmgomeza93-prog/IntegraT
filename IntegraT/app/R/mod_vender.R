@@ -83,6 +83,11 @@ mod_vender_server <- function(id, s, ir_a) {
     carrito <- shiny::reactiveVal(list())
     eligiendo <- shiny::reactiveVal(NULL)    # el producto con variantes del que se elige talla/color
     medio <- shiny::reactiveVal("efectivo")  # el último usado queda elegido
+    cliente <- shiny::reactiveVal(NULL)          # list(id, nombre); NULL = Consumidor final
+    encontrados <- shiny::reactiveVal(list())    # la última búsqueda de clientes
+    creando_cliente <- shiny::reactiveVal(FALSE)
+    error_cliente <- shiny::reactiveVal(NULL)
+    cliente_repetido <- shiny::reactiveVal(FALSE)
     error <- shiny::reactiveVal(NULL)
     ultima <- shiny::reactiveVal(NULL)       # la venta recién cobrada (respuesta de la API)
     refresco <- shiny::reactiveVal(0L)
@@ -99,6 +104,7 @@ mod_vender_server <- function(id, s, ir_a) {
       carrito(list())
       eligiendo(NULL)
       medio("efectivo")
+      cliente(NULL)
       error(NULL)
       ultima(NULL)
       venta_abierta(NULL)
@@ -109,6 +115,7 @@ mod_vender_server <- function(id, s, ir_a) {
 
     datos <- shiny::reactive({
       refresco()
+      s$al_dia  # al entrar, al día con lo que se guardó en otra pantalla
       s$negocio_id
       s$catalogo_v
       shiny::req(shiny::isolate(s$acceso))
@@ -173,7 +180,7 @@ mod_vender_server <- function(id, s, ir_a) {
     # doble toque o un reintento tras perder la respuesta no cobra dos veces).
     clave_idempotencia <- function(lineas, medio_pago) {
       huella <- openssl::sha256(charToRaw(paste(
-        base_clave(), medio_pago,
+        base_clave(), medio_pago, cliente()$id %||% "",
         paste(vapply(lineas, function(l) paste0(l$id, ":", l$cantidad), ""), collapse = ","),
         sep = "|"
       )))
@@ -360,6 +367,13 @@ mod_vender_server <- function(id, s, ir_a) {
             htmltools::tags$span(class = "total-venta__monto numero", formato_dinero(total))
           )
         ),
+        htmltools::tags$h2(class = "hoja__titulo separado", "¿A quién le vendes?"),
+        htmltools::tags$ul(
+          class = "lista-opciones",
+          item_lista(if (is.null(cliente())) "person" else "person-check",
+                     cliente()$nombre %||% "Consumidor final", "Cambiar",
+                     id = ns("elegir_cliente"), class = "action-button")
+        ),
         htmltools::tags$h2(class = "hoja__titulo separado", "¿Cómo paga?"),
         htmltools::tags$div(
           class = "pila",
@@ -381,7 +395,8 @@ mod_vender_server <- function(id, s, ir_a) {
       htmltools::tagList(
         estado_vacio(
           "check-circle", paste0("¡Vendiste ", formato_dinero(as.numeric(venta$total)), "!"),
-          paste0("Venta ", venta$numero, " · ", MEDIOS_PAGO_UI[[venta$medio_pago]]$titulo)
+          paste0("Venta ", venta$numero, " · ", MEDIOS_PAGO_UI[[venta$medio_pago]]$titulo,
+                 if (is.character(venta$cliente_nombre)) paste0(" · ", venta$cliente_nombre))
         ),
         aviso_insumos_en_falta(venta$insumos_en_falta),
         aviso_por_agotarse(venta$por_agotarse),
@@ -420,7 +435,9 @@ mod_vender_server <- function(id, s, ir_a) {
           etiqueta_estado(if (anulada) "Anulada" else "Cobrada", if (anulada) "alerta" else "bien"),
           htmltools::tags$span(
             class = "entrada__texto",
-            paste0(" ", hora_local(venta$fecha_hora), " · ", MEDIOS_PAGO_UI[[venta$medio_pago]]$titulo)
+            paste0(" ", hora_local(venta$fecha_hora), " · ", MEDIOS_PAGO_UI[[venta$medio_pago]]$titulo,
+                   " · ", if (is.character(venta$cliente_nombre)) venta$cliente_nombre
+                          else "Consumidor final")
           )
         ),
         htmltools::tags$section(
@@ -479,6 +496,7 @@ mod_vender_server <- function(id, s, ir_a) {
 
     ui_hoy <- function() {
       refresco()
+      s$al_dia  # al entrar, al día con lo que se guardó en otra pantalla
       r <- sesion_llamar(s, "GET", "v1/ventas")
       if (!r$ok) {
         return(htmltools::tagList(
@@ -528,6 +546,7 @@ mod_vender_server <- function(id, s, ir_a) {
 
     output$contenido <- shiny::renderUI({
       switch(vista(), catalogo = ui_catalogo(), cobro = ui_cobro(), listo = ui_listo(),
+             cliente = ui_cliente(),
              hoy = ui_hoy(), detalle = ui_detalle())
     })
     output$error <- shiny::renderUI(mensaje_error(error()))
@@ -592,6 +611,106 @@ mod_vender_server <- function(id, s, ir_a) {
       error(NULL)
       ir_a_vista("cobro")
     })
+    # --- ¿A quién le vendes? (opcional; por defecto, Consumidor final) ---------------------
+    ui_cliente <- function() {
+      htmltools::tagList(
+        enlace_atras(ns("volver_cobro"), "Volver al cobro"),
+        htmltools::tags$h1(class = "pantalla__titulo", "¿A quién le vendes?"),
+        htmltools::tags$div(
+          class = "campo catalogo__buscador",
+          shiny::textInput(ns("buscar_cliente"), NULL, placeholder = "Buscar por nombre o teléfono",
+                           width = "100%")
+        ),
+        htmltools::tags$ul(
+          class = "lista-opciones",
+          item_lista("person", "Consumidor final", "Sin nombre",
+                     `data-elige-input` = ns("cliente_elegido"), `data-elige-valor` = "")
+        ),
+        shiny::uiOutput(ns("clientes_encontrados")),
+        shiny::uiOutput(ns("cliente_nuevo"))
+      )
+    }
+
+    buscar_cliente <- shiny::debounce(shiny::reactive(trimws(input$buscar_cliente %||% "")), 300)
+
+    output$clientes_encontrados <- shiny::renderUI({
+      shiny::req(vista() == "cliente")
+      r <- sesion_llamar(s, "GET", "v1/clientes",
+                         consulta = if (nzchar(buscar_cliente())) list(q = buscar_cliente()))
+      if (!r$ok) return(mensaje_error(r$mensaje))
+      encontrados(r$cuerpo)
+      if (length(r$cuerpo) == 0) {
+        if (!nzchar(buscar_cliente())) return(NULL)
+        return(htmltools::tags$p(class = "entrada__texto", "No encontramos a nadie con eso."))
+      }
+      htmltools::tags$ul(
+        class = "lista-opciones lista-clientes",
+        lapply(utils::head(r$cuerpo, 8), function(c) {
+          item_lista("person", c$nombre, telefono_visible(c$telefono),
+                     `data-elige-input` = ns("cliente_elegido"), `data-elige-valor` = c$id)
+        })
+      )
+    })
+
+    output$cliente_nuevo <- shiny::renderUI({
+      if (!creando_cliente()) {
+        return(htmltools::tags$div(
+          class = "separado",
+          boton_secundario(ns("nuevo_cliente"), "Nuevo cliente", "person-plus")))
+      }
+      htmltools::tags$section(
+        class = "tarjeta separado",
+        htmltools::tags$h2(class = "hoja__titulo", "Nuevo cliente"),
+        campo_texto(ns("cliente_nombre"), "Nombre", valor = shiny::isolate(input$buscar_cliente) %||% "",
+                    autocompletar = "off"),
+        campo_texto(ns("cliente_telefono"), "Teléfono (opcional)", autocompletar = "off", modo = "tel"),
+        shiny::uiOutput(ns("cliente_error")),  # aparte: así no se borra lo escrito
+        boton_primario(ns("guardar_cliente"), "Guardar y elegir", "check-lg")
+      )
+    })
+    output$cliente_error <- shiny::renderUI(htmltools::tagList(
+      mensaje_error(error_cliente()),
+      if (cliente_repetido()) boton_secundario(ns("guardar_cliente_igual"),
+                                               "Guardar de todos modos", "check2-all")
+    ))
+
+    guardar_cliente <- function(aunque_se_repita) {
+      nombre <- trimws(input$cliente_nombre %||% "")
+      if (nchar(nombre) < 2) return(error_cliente("Escribe el nombre del cliente."))
+      telefono <- trimws(input$cliente_telefono %||% "")
+      r <- sesion_llamar(s, "POST", "v1/clientes", list(
+        nombre = nombre, telefono = if (nzchar(telefono)) telefono,
+        aunque_se_repita = aunque_se_repita))
+      if (!r$ok) {
+        cliente_repetido(r$estado == 409L && grepl("Ya tienes a", r$mensaje, fixed = TRUE))
+        return(error_cliente(r$mensaje))
+      }
+      cliente(list(id = r$cuerpo$id, nombre = r$cuerpo$nombre))
+      ir_a_vista("cobro")
+    }
+
+    shiny::observeEvent(input$elegir_cliente, {
+      creando_cliente(FALSE)
+      error_cliente(NULL)
+      cliente_repetido(FALSE)
+      ir_a_vista("cliente")
+    })
+    shiny::observeEvent(input$volver_cobro, ir_a_vista("cobro"))
+    shiny::observeEvent(input$cliente_elegido, {
+      id <- input$cliente_elegido
+      if (!nzchar(id)) {
+        cliente(NULL)
+      } else {
+        elegido <- Filter(function(c) identical(c$id, id), encontrados())
+        if (length(elegido) == 0) return()
+        cliente(list(id = id, nombre = elegido[[1]]$nombre))
+      }
+      ir_a_vista("cobro")
+    })
+    shiny::observeEvent(input$nuevo_cliente, creando_cliente(TRUE))
+    shiny::observeEvent(input$guardar_cliente, guardar_cliente(FALSE))
+    shiny::observeEvent(input$guardar_cliente_igual, guardar_cliente(TRUE))
+
     shiny::observeEvent(input$volver_catalogo, {
       error(NULL)
       ir_a_vista("catalogo")
@@ -609,7 +728,8 @@ mod_vender_server <- function(id, s, ir_a) {
           c(list(item_id = l$item_id, cantidad = l$cantidad),
             if (!is.null(l$variante_id)) list(item_variante_id = l$variante_id))
         }),
-        medio_pago = medio()
+        medio_pago = medio(),
+        cliente_id = cliente()$id
       )
       r <- sesion_llamar(
         s, "POST", "v1/ventas", cuerpo,
@@ -623,6 +743,7 @@ mod_vender_server <- function(id, s, ir_a) {
       error(NULL)
       ultima(r$cuerpo)
       carrito(list())
+      cliente(NULL)  # la siguiente venta vuelve a Consumidor final
       base_clave(paste(as.character(openssl::rand_bytes(16)), collapse = ""))
       sesion_actualizar_pasos(s)
       ir_a_vista("listo")

@@ -481,3 +481,7 @@
 .existencia--poco { color: var(--color-atencion); font-weight: 600; }
 .por-agotarse { display: grid; gap: var(--esp-2); }
 .por-agotarse .boton-secundario { width: 100%; }
+
+/* C2: clientes */
+.clientes { display: flex; flex-direction: column; gap: var(--esp-3); }
+.clientes .boton-primario, .clientes .boton-secundario { width: 100%; }

@@ -91,6 +91,7 @@ mod_caja_server <- function(id, s, ir_a, seccion = shiny::reactive("caja")) {
 
     datos <- shiny::reactive({
       refresco()
+      s$al_dia  # al entrar, al día con lo que se guardó en otra pantalla
       s$negocio_id
       shiny::req(identical(seccion() %||% "caja", "caja"))
       shiny::req(shiny::isolate(s$acceso))
@@ -100,6 +101,7 @@ mod_caja_server <- function(id, s, ir_a, seccion = shiny::reactive("caja")) {
     cierres <- shiny::reactive({
       shiny::req(vista() == "historial")
       refresco()
+      s$al_dia  # al entrar, al día con lo que se guardó en otra pantalla
       sesion_llamar(s, "GET", "v1/caja/cierres")
     })
 

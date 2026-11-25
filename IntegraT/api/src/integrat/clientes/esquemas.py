@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, StringConstraints, field_serializer
+from pydantic import BaseModel, Field, StringConstraints, field_serializer, field_validator
 
 Nombre = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=120)]
 Texto30 = Annotated[str, StringConstraints(strip_whitespace=True, max_length=30)]
@@ -30,6 +30,11 @@ class ClienteIn(BaseModel):
     aunque_se_repita: bool = Field(
         default=False, description="Guardar aunque ya haya un cliente con ese teléfono o NIT.")
 
+    @field_validator("datos", mode="before")
+    @classmethod
+    def _lista_vacia(cls, v):
+        return {} if v == [] else v  # R manda una lista vacía como []
+
 
 class ClienteCambios(BaseModel):
     """Solo se cambia lo que se envía; `null` borra el dato. `datos` se mezcla con los que había."""
@@ -45,6 +50,11 @@ class ClienteCambios(BaseModel):
     notas: Texto300 | None = None
     datos: dict[str, Any] | None = None
     aunque_se_repita: bool = False
+
+    @field_validator("datos", mode="before")
+    @classmethod
+    def _lista_vacia(cls, v):
+        return {} if v == [] else v
 
 
 class ClienteResumen(BaseModel):
@@ -85,6 +95,7 @@ class ClienteOut(ClienteResumen):
     datos: dict[str, Any]
     cliente_desde: datetime  # UTC
     version: int
+    archivado: bool = False  # sigue con sus ventas; no aparece al vender
     compras: ComprasDelCliente | None = None  # solo en la ficha
 
 

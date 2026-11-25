@@ -188,6 +188,7 @@ mod_inicio_server <- function(id, s, ir_a, seccion = shiny::reactive("inicio")) 
     resultados <- shiny::reactive({
       shiny::req(s$negocio)
       s$cuentas_v
+      s$al_dia
       shiny::req(identical(seccion() %||% "inicio", "inicio"))
       sesion_llamar(s, "GET", "v1/resultados")
     })
@@ -195,6 +196,7 @@ mod_inicio_server <- function(id, s, ir_a, seccion = shiny::reactive("inicio")) 
     hoy <- shiny::reactive({
       shiny::req(s$negocio)
       s$cuentas_v
+      s$al_dia
       shiny::req(identical(seccion() %||% "inicio", "inicio"))
       list(ventas = sesion_llamar(s, "GET", "v1/ventas"), caja = sesion_llamar(s, "GET", "v1/caja"))
     })
@@ -208,6 +210,7 @@ mod_inicio_server <- function(id, s, ir_a, seccion = shiny::reactive("inicio")) 
     output$por_agotarse <- shiny::renderUI({
       shiny::req(s$negocio)
       s$cuentas_v
+      s$al_dia
       s$catalogo_v
       shiny::req(identical(seccion() %||% "inicio", "inicio"))
       r <- sesion_llamar(s, "GET", "v1/inventario/alertas")

@@ -120,7 +120,7 @@ def _validar_datos(campos: list, nuevos: dict, previos: dict | None = None) -> d
 _COLUMNAS = (ops_cliente.c.id, ops_cliente.c.nombre, ops_cliente.c.telefono, ops_cliente.c.correo,
              ops_cliente.c.direccion, ops_cliente.c.tipo_id_fiscal, ops_cliente.c.id_fiscal,
              ops_cliente.c.nombre_fiscal, ops_cliente.c.notas, ops_cliente.c.datos,
-             ops_cliente.c.creado_en, ops_cliente.c.version)
+             ops_cliente.c.creado_en, ops_cliente.c.version, ops_cliente.c.eliminado_en)
 
 
 def _out(f, campos: list, compras: ComprasDelCliente | None = None) -> ClienteOut:
@@ -131,6 +131,7 @@ def _out(f, campos: list, compras: ComprasDelCliente | None = None) -> ClienteOu
         nombre_fiscal=f.nombre_fiscal, notas=f.notas,
         datos={k: v for k, v in (f.datos or {}).items() if k in vivos},
         cliente_desde=_utc(f.creado_en), version=f.version, compras=compras,
+        archivado=f.eliminado_en is not None,
     )
 
 
@@ -172,11 +173,14 @@ def crear(con: Connection, ctx: ais.ContextoNegocio, datos: ClienteIn) -> Client
     return _out(fila, campos)
 
 
-def buscar(con: Connection, ctx: ais.ContextoNegocio, q: str | None) -> list[ClienteResumen]:
-    """Por nombre (sin importar tildes ni mayúsculas), teléfono o NIT/CUI."""
+def buscar(con: Connection, ctx: ais.ContextoNegocio, q: str | None,
+           archivados: bool = False) -> list[ClienteResumen]:
+    """Por nombre (sin tildes ni mayúsculas), teléfono o NIT/CUI. `archivados`: solo esos."""
     consulta = ais.seleccionar(ctx, ops_cliente, ops_cliente.c.id, ops_cliente.c.nombre,
                                ops_cliente.c.telefono, ops_cliente.c.tipo_id_fiscal,
-                               ops_cliente.c.id_fiscal)
+                               ops_cliente.c.id_fiscal, incluir_eliminados=archivados)
+    if archivados:
+        consulta = consulta.where(ops_cliente.c.eliminado_en.is_not(None))
     texto = (q or "").strip()
     if texto:
         patron = "%" + texto.replace("\\", "").replace("%", "").replace("_", "") + "%"
@@ -210,7 +214,8 @@ def _compras(con: Connection, ctx: ais.ContextoNegocio, cliente_id: uuid.UUID) -
 
 
 def obtener(con: Connection, ctx: ais.ContextoNegocio, cliente_id: uuid.UUID) -> ClienteOut:
-    fila = con.execute(ais.seleccionar(ctx, ops_cliente, *_COLUMNAS)
+    """La ficha, también de un archivado (sus ventas lo siguen nombrando)."""
+    fila = con.execute(ais.seleccionar(ctx, ops_cliente, *_COLUMNAS, incluir_eliminados=True)
                        .where(ops_cliente.c.id == cliente_id)).first()
     if fila is None:
         raise NoEncontrado
@@ -265,6 +270,19 @@ def archivar(con: Connection, ctx: ais.ContextoNegocio, cliente_id: uuid.UUID) -
     )
     if resultado.rowcount == 0:
         raise NoEncontrado
+
+
+def recuperar(con: Connection, ctx: ais.ContextoNegocio, cliente_id: uuid.UUID) -> ClienteOut:
+    """Vuelve a la lista y a Vender un cliente archivado."""
+    resultado = con.execute(
+        ais.actualizar(ctx, ops_cliente, ops_cliente.c.id == cliente_id,
+                       ops_cliente.c.eliminado_en.is_not(None), incluir_eliminados=True)
+        .values(eliminado_en=None, eliminado_por=None, version=ops_cliente.c.version + 1,
+                actualizado_por=ctx.usuario_id)
+    )
+    if resultado.rowcount == 0:
+        raise NoEncontrado
+    return obtener(con, ctx, cliente_id)
 
 
 def existe(con: Connection, ctx: ais.ContextoNegocio, cliente_id: uuid.UUID) -> bool:

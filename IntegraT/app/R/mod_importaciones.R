@@ -68,6 +68,7 @@ mod_importaciones_server <- function(id, s, ir_a) {
 
     lista <- shiny::reactive({
       refresco()
+      s$al_dia  # al entrar, al día con lo que se guardó en otra pantalla
       s$negocio_id
       shiny::req(vista() == "lista", shiny::isolate(s$acceso))
       sesion_llamar(s, "GET", "v1/importaciones")

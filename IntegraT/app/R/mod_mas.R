@@ -6,6 +6,7 @@ mod_mas_ui <- function(id) {
     htmltools::tags$h1(class = "pantalla__titulo", "Más"),
     htmltools::tags$ul(
       class = "lista-opciones",
+      item_lista("people", "Clientes", id = ns("clientes"), class = "action-button"),
       item_lista("cash-coin", "Gastos", id = ns("gastos"), class = "action-button"),
       item_lista("basket", "Inventario", id = ns("inventario"), class = "action-button"),
       item_lista("receipt", "Compras y proveedores", id = ns("compras"), class = "action-button"),
@@ -43,6 +44,7 @@ mod_mas_server <- function(id, al_salir, ir_a) {
   shiny::moduleServer(id, function(input, output, session) {
     shiny::observeEvent(input$salir, al_salir())
     shiny::observeEvent(input$gastos, ir_a("gastos"))
+    shiny::observeEvent(input$clientes, ir_a("clientes"))
     shiny::observeEvent(input$inventario, ir_a("inventario"))
     shiny::observeEvent(input$compras, ir_a("compras"))
     shiny::observeEvent(input$impuestos, ir_a("impuestos"))

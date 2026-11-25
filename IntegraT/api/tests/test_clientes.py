@@ -102,7 +102,15 @@ def test_agregar_buscar_y_ver_un_cliente(tienda):
 
 def test_datos_invalidos_dicen_que_corregir(tienda):
     cliente, _, h = tienda
-    assert nuevo(cliente, h, nombre="M").status_code == 422
+    r = nuevo(cliente, h, nombre="M")
+    assert r.status_code == 422
+    assert r.json()["detail"] == "Revisa el nombre: escribe al menos 2 letras."
+    r = nuevo(cliente, h, tipo_id_fiscal="RUT")
+    assert r.json()["detail"] == "Revisa el tipo de factura: elige una de las opciones."
+    r = cliente.post("/v1/clientes", headers=h, json={"telefono": "55551234"})
+    assert r.json()["detail"] == "Revisa el nombre: falta."
+    # La app (R) manda los datos propios vacíos como []: se acepta.
+    assert nuevo(cliente, h, nombre="Sin datos", datos=[]).status_code == 201
     r = nuevo(cliente, h, telefono="1234")
     assert r.status_code == 422 and "8 dígitos" in r.json()["detail"]
     r = nuevo(cliente, h, tipo_id_fiscal="NIT", id_fiscal="1234567-8")
@@ -131,8 +139,19 @@ def test_cambiar_y_archivar(tienda):
                           json={"version": maria["version"], "nombre": "Otra"})
     assert viejo.status_code == 409
     assert cliente.delete(f"/v1/clientes/{maria['id']}", headers=h).status_code == 204
-    assert cliente.get(f"/v1/clientes/{maria['id']}", headers=h).status_code == 404
+    ficha = cliente.get(f"/v1/clientes/{maria['id']}", headers=h).json()
+    assert ficha["archivado"] is True  # la ficha sigue: sus ventas la nombran
     assert cliente.get("/v1/clientes", headers=h).json() == []
+    archivados = cliente.get("/v1/clientes", headers=h, params={"archivados": True}).json()
+    assert [c["nombre"] for c in archivados] == ["María López"]
+    # Archivada no se cambia; se recupera y vuelve a la lista.
+    r = cliente.patch(f"/v1/clientes/{maria['id']}", headers=h,
+                      json={"version": ficha["version"], "nombre": "Otra"})
+    assert r.status_code == 404
+    r = cliente.post(f"/v1/clientes/{maria['id']}/recuperar", headers=h)
+    assert r.status_code == 200 and r.json()["archivado"] is False
+    assert [c["nombre"] for c in cliente.get("/v1/clientes", headers=h).json()] == ["María López"]
+    assert cliente.post(f"/v1/clientes/{maria['id']}/recuperar", headers=h).status_code == 404
 
 
 def test_campos_propios(tienda):

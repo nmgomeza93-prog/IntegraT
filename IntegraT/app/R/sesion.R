@@ -10,6 +10,9 @@ sesion_nueva <- function() {
     abrir_compra = 0L,  # ídem para "Registrar compra"
     abrir_cierre = 0L,  # ídem para "Cerrar el día"
     cuentas_v = 0L,  # sube cuando cambia algo que mueve las cuentas (para el resumen del Inicio)
+    datos_v = 0L,  # sube con CADA cambio guardado en la API (sesion_llamar)
+    al_dia = 0L,   # = datos_v al entrar a una sección: de él dependen los datos de cada pantalla,
+                   # así se ven al día al abrirlas sin redibujar la que se está usando
     regimen_iva = NULL,  # el régimen elegido en "Tus impuestos" (si no, el del negocio)
     margen_objetivo = NULL,  # el margen elegido en "Tu margen de ganancia" (si no, el del negocio)
     vender_sin_existencia = NULL,  # la regla elegida en "Si no hay inventario" (si no, la del negocio)
@@ -38,6 +41,8 @@ sesion_cerrar <- function(s) {
   s$abrir_compra <- 0L
   s$abrir_cierre <- 0L
   s$cuentas_v <- 0L
+  s$datos_v <- 0L
+  s$al_dia <- 0L
   s$regimen_iva <- NULL
   s$margen_objetivo <- NULL
   s$vender_sin_existencia <- NULL
@@ -78,6 +83,9 @@ sesion_llamar <- function(s, metodo, ruta, cuerpo = NULL, cabeceras = NULL, cons
     } else if (renovada$estado == 401L) {
       sesion_cerrar(s)
     }
+  }
+  if (isTRUE(resultado$ok) && metodo != "GET") {
+    s$datos_v <- shiny::isolate(s$datos_v %||% 0L) + 1L
   }
   resultado
 }

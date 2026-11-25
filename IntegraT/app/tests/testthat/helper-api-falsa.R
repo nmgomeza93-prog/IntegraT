@@ -240,6 +240,29 @@ iniciar_api_falsa <- function(env = parent.frame()) {
     estado$recetas <- list()            # id de ítem -> líneas (insumo_id, cantidad, unidad_codigo)
     # --- Compras y proveedores en memoria ---
     estado$proveedores <- list()
+    # --- Clientes en memoria ---
+    estado$clientes <- list()
+    estado$campos_cliente <- list()
+    normalizar_tel <- function(t) {
+      d <- gsub("[^0-9]", "", t %||% "")
+      if (!nzchar(d)) return(NULL)
+      if (nchar(d) == 8) return(paste0("+502", d))
+      if (nchar(d) == 11 && startsWith(d, "502")) return(paste0("+", d))
+      NA_character_
+    }
+    sin_tilde <- function(x) chartr("áéíóúüñÁÉÍÓÚÜÑ", "aeiouunaeiouun", tolower(x))
+    ficha_cliente <- function(c) {
+      suyas <- Filter(function(v) identical(v$cliente_id, c$id) && identical(v$estado, "pagada"),
+                      estado$ventas)
+      suyas <- rev(suyas)
+      c$compras <- list(
+        cantidad = length(suyas),
+        total = sprintf("%.2f", sum(vapply(suyas, function(v) as.numeric(v$total), 0))),
+        ultima = if (length(suyas) > 0) suyas[[1]]$fecha_hora else NULL,
+        ultimas = lapply(utils::head(suyas, 10), function(v) list(
+          venta_id = v$id, numero = v$numero, fecha_hora = v$fecha_hora, total = v$total)))
+      c
+    }
     estado$compras <- list()            # en orden de creación
     estado$claves_compra <- list()
     estado$compras_creadas <- 0L
@@ -376,6 +399,9 @@ iniciar_api_falsa <- function(env = parent.frame()) {
                               compras = estado$compras_creadas,
                               anulaciones_compra = estado$anulaciones_compra,
                               proveedores = length(estado$proveedores),
+                              clientes = sum(vapply(estado$clientes, function(c) !isTRUE(c$archivado), NA)),
+                              cliente_ultima_venta = if (length(estado$ventas) > 0)
+                                estado$ventas[[length(estado$ventas)]]$cliente_id,
                               regimen = estado$regimen,
                               margen = estado$margen,
                               regla_venta = estado$regla_venta,
@@ -901,6 +927,105 @@ iniciar_api_falsa <- function(env = parent.frame()) {
           return(json(200, nuevo))
         }
       }
+      if (ruta == "/v1/clientes/campos" && metodo == "GET") {
+        return(json(200, unname(estado$campos_cliente)))
+      }
+      if (ruta == "/v1/clientes/campos" && metodo == "PUT") {
+        d <- leer(req)
+        nuevos <- list()
+        for (k in seq_along(d$campos)) {
+          c <- d$campos[[k]]
+          id <- c$id %||% paste0("cc-", k, "-", length(estado$campos_cliente) + 10L)
+          nuevos[[id]] <- list(id = id, nombre = c$nombre, tipo = c$tipo, orden = k - 1L)
+        }
+        estado$campos_cliente <- nuevos
+        return(json(200, unname(nuevos)))
+      }
+      if (ruta == "/v1/clientes" && metodo == "GET") {
+        consulta <- sub("^[?]", "", req$QUERY_STRING %||% "")
+        q <- if (grepl("(^|&)q=", consulta)) {
+          utils::URLdecode(gsub("+", " ", sub("(^|.*&)q=([^&]*).*", "\2", consulta), fixed = TRUE))
+        } else ""
+        q <- sin_tilde(trimws(enc2utf8(q)))
+        archivados <- grepl("(^|&)archivados=true", consulta)
+        lista <- Filter(function(c) isTRUE(c$archivado) == archivados, unname(estado$clientes))
+        if (nzchar(q)) {
+          digitos <- gsub("[^0-9]", "", q)
+          lista <- Filter(function(c) grepl(q, sin_tilde(c$nombre), fixed = TRUE) ||
+                            (nchar(digitos) >= 3 && grepl(digitos, c$telefono %||% "", fixed = TRUE)),
+                          lista)
+        }
+        lista <- lista[order(vapply(lista, function(c) tolower(c$nombre), ""))]
+        return(json(200, lista))
+      }
+      if (ruta == "/v1/clientes" && metodo == "POST") {
+        d <- leer(req)
+        nombre <- trimws(d$nombre %||% "")
+        if (nchar(nombre) < 2) {
+          return(json(422, list(detail = "Revisa el nombre: escribe al menos 2 letras.")))
+        }
+        tel <- normalizar_tel(d$telefono)
+        if (identical(tel, NA_character_)) {
+          return(json(422, list(detail = "Un teléfono de Guatemala tiene 8 dígitos.")))
+        }
+        if (!isTRUE(d$aunque_se_repita) && !is.null(tel)) {
+          for (c in estado$clientes) if (!isTRUE(c$archivado) && identical(c$telefono, tel)) {
+            return(json(409, list(detail = paste0("Ya tienes a ", c$nombre, " con ese teléfono. ",
+                                                  "Búscalo en tus clientes o guárdalo de todos modos."))))
+          }
+        }
+        id <- paste0("cl-", length(estado$clientes) + 1L)
+        nuevo <- list(id = id, nombre = nombre, telefono = tel, correo = d$correo,
+                      direccion = d$direccion, tipo_id_fiscal = d$tipo_id_fiscal %||% "CF",
+                      id_fiscal = d$id_fiscal, nombre_fiscal = d$nombre_fiscal, notas = d$notas,
+                      datos = Filter(Negate(is.null), d$datos %||% list()),
+                      cliente_desde = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+                      version = 1L, archivado = FALSE)
+        estado$clientes[[id]] <- nuevo
+        return(json(201, ficha_cliente(nuevo)))
+      }
+      if (grepl("^/v1/clientes/[^/]+/recuperar$", ruta) && metodo == "POST") {
+        id <- sub("^/v1/clientes/([^/]+)/recuperar$", "\\1", ruta)
+        c <- estado$clientes[[id]]
+        if (is.null(c) || !isTRUE(c$archivado)) {
+          return(json(404, list(detail = "No encontramos ese cliente.")))
+        }
+        c$archivado <- FALSE
+        c$version <- c$version + 1L
+        estado$clientes[[id]] <- c
+        return(json(200, ficha_cliente(c)))
+      }
+      if (grepl("^/v1/clientes/[^/]+$", ruta)) {
+        id <- sub("^/v1/clientes/", "", ruta)
+        c <- estado$clientes[[id]]
+        if (is.null(c)) return(json(404, list(detail = "No encontramos ese cliente.")))
+        if (metodo == "GET") return(json(200, ficha_cliente(c)))
+        if (metodo == "DELETE") {
+          if (isTRUE(c$archivado)) return(json(404, list(detail = "No encontramos ese cliente.")))
+          c$archivado <- TRUE
+          estado$clientes[[id]] <- c
+          return(json(200, list()))
+        }
+        if (metodo == "PATCH") {
+          if (isTRUE(c$archivado)) return(json(404, list(detail = "No encontramos ese cliente.")))
+          d <- leer(req)
+          if (!identical(as.integer(d$version), as.integer(c$version))) {
+            return(json(409, list(detail = "Alguien más cambió este cliente.")))
+          }
+          for (campo in c("nombre", "correo", "direccion", "tipo_id_fiscal", "id_fiscal",
+                          "nombre_fiscal", "notas")) {
+            if (campo %in% names(d)) c[campo] <- list(d[[campo]])
+          }
+          if ("telefono" %in% names(d)) c["telefono"] <- list(normalizar_tel(d$telefono))
+          if (!is.null(d$datos)) {
+            for (k in names(d$datos)) c$datos[k] <- list(d$datos[[k]])
+            c$datos <- Filter(Negate(is.null), c$datos)
+          }
+          c$version <- c$version + 1L
+          estado$clientes[[id]] <- c
+          return(json(200, ficha_cliente(c)))
+        }
+      }
       if (ruta == "/v1/proveedores" && metodo == "GET") {
         lista <- unname(estado$proveedores)
         lista <- lista[order(vapply(lista, function(p) tolower(p$nombre), ""))]
@@ -1116,6 +1241,10 @@ iniciar_api_falsa <- function(env = parent.frame()) {
         if (length(lineas) == 0 || !(d$medio_pago %in% c("efectivo", "tarjeta", "transferencia"))) {
           return(json(422, list(detail = "Revisa los datos e intenta de nuevo.")))
         }
+        if (!is.null(d$cliente_id) && (is.null(estado$clientes[[d$cliente_id]]) ||
+                                       isTRUE(estado$clientes[[d$cliente_id]]$archivado))) {
+          return(json(422, list(detail = "Ese cliente ya no está. Elige otro o vende a Consumidor final.")))
+        }
         Sys.sleep(0.4)  # para que un doble toque llegue antes de terminar
         clave <- req$HTTP_IDEMPOTENCY_KEY %||% NULL
         if (!is.null(clave) && !is.null(estado$claves_venta[[clave]])) {
@@ -1172,7 +1301,8 @@ iniciar_api_falsa <- function(env = parent.frame()) {
           fecha_hora = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
           estado = "pagada", total = sprintf("%.2f", total), moneda_codigo = "GTQ",
           medio_pago = d$medio_pago, lineas = armadas, anulada_en = NULL, motivo_anulacion = NULL,
-          creada_n = estado$ventas_creadas)
+          creada_n = estado$ventas_creadas, cliente_id = d$cliente_id,
+          cliente_nombre = if (!is.null(d$cliente_id)) estado$clientes[[d$cliente_id]]$nombre)
         # Los insumos de las recetas se descuentan; si alguno se acaba, se avisa (la venta se cobra)
         sin_existencia <- character()
         for (l in lineas) {

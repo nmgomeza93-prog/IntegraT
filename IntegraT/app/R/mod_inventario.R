@@ -90,6 +90,7 @@ mod_inventario_server <- function(id, s, ir_a) {
 
     datos <- shiny::reactive({
       refresco()
+      s$al_dia  # al entrar, al día con lo que se guardó en otra pantalla
       s$negocio_id
       shiny::req(shiny::isolate(s$acceso))
       list(
@@ -108,6 +109,7 @@ mod_inventario_server <- function(id, s, ir_a) {
 
     historial <- shiny::reactive({
       refresco()
+      s$al_dia  # al entrar, al día con lo que se guardó en otra pantalla
       id_abierto <- actual()
       shiny::req(id_abierto, shiny::isolate(s$acceso))
       sesion_llamar(s, "GET", paste0("v1/insumos/", id_abierto, "/movimientos"))

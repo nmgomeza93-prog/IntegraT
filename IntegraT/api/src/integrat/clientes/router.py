@@ -71,10 +71,11 @@ def fijar_campos(datos: CamposIn, acceso: Acceso, engine: Motor) -> list[CampoOu
 @router.get("/clientes", response_model=list[ClienteResumen],
             summary="Buscar clientes por nombre, teléfono o NIT (máximo 50)")
 def buscar(acceso: Acceso, engine: Motor,
-           q: Annotated[str | None, Query(max_length=60)] = None) -> list[ClienteResumen]:
+           q: Annotated[str | None, Query(max_length=60)] = None,
+           archivados: bool = False) -> list[ClienteResumen]:
     _exigir(acceso, ROLES_QUE_VEN)
     with engine.connect() as con:
-        return servicio.buscar(con, acceso.contexto, q)
+        return servicio.buscar(con, acceso.contexto, q, archivados)
 
 
 @router.post("/clientes", response_model=ClienteOut, status_code=status.HTTP_201_CREATED,
@@ -128,3 +129,14 @@ def archivar(cliente_id: uuid.UUID, acceso: Acceso, engine: Motor) -> Response:
     except servicio.NoEncontrado:
         raise _NO_ENCONTRADO from None
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/clientes/{cliente_id}/recuperar", response_model=ClienteOut,
+             summary="Volver a la lista a un cliente archivado")
+def recuperar(cliente_id: uuid.UUID, acceso: Acceso, engine: Motor) -> ClienteOut:
+    _exigir(acceso, ROLES_QUE_CONFIGURAN)
+    try:
+        with engine.begin() as con:
+            return servicio.recuperar(con, acceso.contexto, cliente_id)
+    except servicio.NoEncontrado:
+        raise _NO_ENCONTRADO from None

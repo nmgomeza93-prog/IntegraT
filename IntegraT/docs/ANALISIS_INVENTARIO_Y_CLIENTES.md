@@ -109,3 +109,21 @@
 - Ventas: `cliente_id` opcional al cobrar; `cliente_id` y `cliente_nombre` en cada venta (también si el
   cliente se archivó). Pruebas en `api/tests/test_clientes.py`.
 - Sigue: C2 (clientes en la app).
+
+## 8. Estado (2026-11-25): C2 hecho
+- `app/R/mod_clientes.R` (Más → Clientes): lista con búsqueda, ficha (datos, campos propios, "Te ha comprado"
+  y sus últimas compras), agregar y cambiar (con "Guardar de todos modos" si el teléfono o NIT se repite),
+  archivar con confirmación y "Datos que pides" para los campos propios.
+- Vender: al cobrar, "¿A quién le vendes?" (Consumidor final por defecto; buscar o "Nuevo cliente" con
+  nombre y teléfono); la venta y su detalle dicen a quién. Pruebas en `app/tests/testthat/test-clientes.R`.
+- Pendiente para después: fiado y cuentas por cobrar, descuentos por cliente y factura FEL con su NIT.
+
+### Ajustes tras la prueba del usuario (2026-11-25)
+- "Revisa los datos e intenta de nuevo" al agregar un cliente: la app mandaba los campos propios vacíos
+  como `[]`. Corregido en la app y en la API (acepta `[]`); además, todo error de validación dice ahora qué
+  dato revisar (`integrat/errores.py`).
+- Archivar con ventas: **no se pierde integridad**. Nada se borra (borrado lógico); las ventas conservan
+  `cliente_id` y siguen mostrando su nombre y contando en los números. La confirmación lo explica con sus
+  compras, la ficha queda marcada "Archivado" y se puede **recuperar** (`POST /v1/clientes/{id}/recuperar`,
+  lista con `?archivados=true`). Un archivado no se edita ni se le vende.
+- Sincronización: ver "Pantallas al día" en `CLAUDE.md`.

@@ -39,6 +39,7 @@ mod_dueno_server <- function(id, s, ir_a) {
 
     datos <- shiny::reactive({
       refresco()
+      s$al_dia  # al entrar, al día con lo que se guardó en otra pantalla
       s$negocio_id
       shiny::req(shiny::isolate(s$acceso))
       sesion_llamar(s, "GET", "v1/dueno")

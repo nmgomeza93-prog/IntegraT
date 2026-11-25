@@ -106,6 +106,7 @@ mod_gastos_server <- function(id, s, ir_a) {
 
     datos <- shiny::reactive({
       refresco()
+      s$al_dia  # al entrar, al día con lo que se guardó en otra pantalla
       s$negocio_id
       pedido <- mes_pedido()
       shiny::req(shiny::isolate(s$acceso))

@@ -37,6 +37,12 @@ server <- function(input, output, session) {
     session$sendCustomMessage("ir_a_seccion", destino)
   }
 
+  # Al entrar a una sección, si algo cambió en otra (una venta, una compra, un cliente nuevo…),
+  # sus datos se piden de nuevo. Solo se recarga lo que está a la vista (Shiny suspende lo oculto).
+  observeEvent(input$seccion, {
+    s$al_dia <- isolate(s$datos_v)
+  }, ignoreInit = TRUE)
+
   marca <- new.env()  # marca$saliendo = TRUE cuando la persona sale a propósito
   salir <- function() {
     marca$saliendo <- TRUE
@@ -104,6 +110,7 @@ server <- function(input, output, session) {
   mod_dueno_server("dueno", s, ir_a)
   mod_margen_server("margen", s, ir_a)
   mod_reglas_venta_server("reglas_venta", s, ir_a)
+  mod_clientes_server("clientes", s, ir_a)
   mod_importaciones_server("importaciones", s, ir_a)
   mod_mas_server("mas", salir, ir_a)
 }

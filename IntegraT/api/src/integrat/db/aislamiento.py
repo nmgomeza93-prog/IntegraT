@@ -56,7 +56,11 @@ def insertar(ctx: ContextoNegocio, tabla: sa.Table, valores: dict) -> sa.Insert:
     return sa.insert(tabla).values(**datos)
 
 
-def actualizar(ctx: ContextoNegocio, tabla: sa.Table, *condiciones) -> sa.Update:
-    """UPDATE limitado al negocio del contexto. Agregar `.values(...)` al resultado."""
+def actualizar(ctx: ContextoNegocio, tabla: sa.Table, *condiciones,
+               incluir_eliminados: bool = False) -> sa.Update:
+    """UPDATE limitado al negocio del contexto. Agregar `.values(...)` al resultado.
+
+    `incluir_eliminados=True` solo para recuperar algo archivado.
+    """
     _exigir_tabla_de_negocio(tabla)
-    return sa.update(tabla).where(*_filtros(ctx, tabla, False), *condiciones)
+    return sa.update(tabla).where(*_filtros(ctx, tabla, incluir_eliminados), *condiciones)
