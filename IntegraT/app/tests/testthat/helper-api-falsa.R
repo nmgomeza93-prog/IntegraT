@@ -377,7 +377,9 @@ iniciar_api_falsa <- function(env = parent.frame()) {
           return(json(422, list(detail = "Revisa los datos e intenta de nuevo.")))
         }
         estado$regimen <- d$regimen_iva
-        return(list(status = 204L, headers = list(), body = ""))
+        # La API real responde 204; aquí 200 con {} porque un 204 de httpuv sin cuerpo deja
+        # la conexión en mal estado para la siguiente petición (para la app, ambos son "ok").
+        return(json(200, list()))
       }
       # Resultados del mes: versión simple de lo que calcula la API real desde los asientos
       # (ventas pagadas menos gastos; en el régimen general, sin el 12 % de IVA de las ventas).
