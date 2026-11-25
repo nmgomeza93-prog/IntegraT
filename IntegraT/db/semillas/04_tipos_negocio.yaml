@@ -163,8 +163,8 @@
     - tipo_negocio_codigo: ventas_en_linea
       tipo_plantilla: operacion
       version_plantilla: 1
-      contenido: {vender_sin_existencia: bloquear, mercaderia_por_defecto: true}
+      contenido: {vender_sin_existencia: bloquear, mercaderia_por_defecto: true, minimo_defecto: 2}
     - tipo_negocio_codigo: restaurante
       tipo_plantilla: operacion
       version_plantilla: 1
-      contenido: {vender_sin_existencia: avisar, mercaderia_por_defecto: false}
+      contenido: {vender_sin_existencia: avisar, mercaderia_por_defecto: false, minimo_defecto: 0}

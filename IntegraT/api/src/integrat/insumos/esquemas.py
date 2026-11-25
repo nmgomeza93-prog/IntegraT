@@ -166,3 +166,25 @@ class MercaderiaIn(BaseModel):
 class MercaderiaOut(BaseModel):
     activa: bool
     insumo: InsumoOut | None   # el insumo ligado al producto (existencia y costo)
+
+
+# ------------------------------------------------------------------ alertas de existencia
+
+class AlertaProducto(BaseModel):
+    item_id: uuid.UUID
+    item_variante_id: uuid.UUID
+    nombre: str              # "Pijama Luxe · M"
+    disponible: int | None
+    estado: str              # "agotado" o "poco"
+
+
+class AlertaIngrediente(BaseModel):
+    insumo_id: uuid.UUID
+    nombre: str
+    unidad_codigo: str
+    estado: str
+
+
+class AlertasOut(BaseModel):
+    productos: list[AlertaProducto]
+    ingredientes: list[AlertaIngrediente]

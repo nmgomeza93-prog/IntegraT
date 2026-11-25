@@ -96,12 +96,14 @@ iniciar_api_falsa <- function(env = parent.frame()) {
       list(id = id, nombre = nombre, tipo_negocio_codigo = tipo, pais_codigo = "GT",
            moneda_codigo = "GTQ", zona_horaria = "America/Guatemala", da_factura = factura,
            regimen_iva = estado$regimen, margen_objetivo = estado$margen,
-           vender_sin_existencia = estado$regla_venta, capacidades = list("recetas", "mesas"),
+           vender_sin_existencia = estado$regla_venta,
+           minimo_defecto = sprintf("%.2f", estado$minimo), capacidades = list("recetas", "mesas"),
            vocabulario = vocab[[tipo]], primeros_pasos = pasos_al_dia(tipo))
     }
     estado$regimen <- "no_se"
     estado$margen <- "0.3500"
     estado$regla_venta <- "avisar"   # Mari es un restaurante: avisa y deja vender
+    estado$minimo <- 2L               # "por agotarse" con 2 o menos (versión simple)
     estado$atributos <- list(
       list(id = "at-1", nombre = "Talla",
            valores = lapply(c("S", "M", "L"), function(v) list(id = paste0("va-", v), valor = v))),
@@ -319,6 +321,8 @@ iniciar_api_falsa <- function(env = parent.frame()) {
       it$margen_propio_valor <- NULL
       it$controla_inventario <- !is.null(it$stock)
       it["disponible"] <- list(it$stock)
+      it["alerta_existencia"] <- list(if (is.null(it$stock)) NULL else if (it$stock <= 0) "agotado"
+                                      else if (it$stock <= estado$minimo) "poco")
       it$stock <- NULL
       costo <- costo_de(it)
       it["precio_sugerido"] <- list(NULL)
@@ -491,7 +495,18 @@ iniciar_api_falsa <- function(env = parent.frame()) {
           return(json(422, list(detail = "Revisa los datos e intenta de nuevo.")))
         }
         estado$regla_venta <- d$vender_sin_existencia
+        if (!is.null(d$minimo_defecto)) estado$minimo <- as.integer(d$minimo_defecto)
         return(json(200, list()))
+      }
+      if (ruta == "/v1/inventario/alertas" && metodo == "GET") {
+        productos <- list()
+        for (it in estado$items) {
+          if (is.null(it$stock) || it$stock > estado$minimo) next
+          productos[[length(productos) + 1L]] <- list(
+            item_id = it$id, item_variante_id = paste0(it$id, "-u"), nombre = it$nombre,
+            disponible = it$stock, estado = if (it$stock <= 0) "agotado" else "poco")
+        }
+        return(json(200, list(productos = productos, ingredientes = list())))
       }
       if (ruta == "/v1/categorias/sugeridas" && metodo == "GET") {
         return(json(200, list(list(nombre = "Ropa de dormir", icono = "moon-stars",
@@ -1119,12 +1134,13 @@ iniciar_api_falsa <- function(env = parent.frame()) {
                                                     if (it$stock == 0) " (agotado)." else paste0(" (solo quedan ", it$stock, ").")))))
             }
           }
-          for (l in lineas) {
-            it <- estado$items[[l$item_id]]
-            if (!is.null(it$stock)) {
-              it$stock <- it$stock - l$cantidad
-              estado$items[[l$item_id]] <- it
-            }
+        }
+        # Con cualquier regla, lo vendido sale del inventario (con "avisar" puede quedar en negativo).
+        for (l in lineas) {
+          it <- estado$items[[l$item_id]]
+          if (!is.null(it) && !is.null(it$stock)) {
+            it$stock <- it$stock - l$cantidad
+            estado$items[[l$item_id]] <- it
           }
         }
         armadas <- list()
@@ -1168,7 +1184,13 @@ iniciar_api_falsa <- function(env = parent.frame()) {
             if (ins$existencia <= 0) sin_existencia <- c(sin_existencia, ins$nombre)
           }
         }
-        venta_resp <- c(venta, list(insumos_en_falta = as.list(sort(unique(sin_existencia)))))
+        quedan_poco <- character()
+        for (l in lineas) {
+          it <- estado$items[[l$item_id]]
+          if (!is.null(it$stock) && it$stock <= estado$minimo) quedan_poco <- c(quedan_poco, it$nombre)
+        }
+        venta_resp <- c(venta, list(insumos_en_falta = as.list(sort(unique(sin_existencia))),
+                                    por_agotarse = as.list(sort(unique(quedan_poco)))))
         estado$ventas[[venta$id]] <- venta
         if (!is.null(clave)) estado$claves_venta[[clave]] <- venta_resp
         se_pierde <- any(vapply(armadas, function(a) identical(a$nombre, "Se pierde"), NA))

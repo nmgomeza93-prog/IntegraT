@@ -88,4 +88,12 @@
 - App: "Quedan N", "Agotado" y "Sin inventario" en Vender (lo agotado no se toca, también por talla), tope del
   carrito, el 409 de la API se muestra y recarga la lista; Más → "Si no hay inventario". Pruebas en
   `test-existencia.R`.
-- Sigue: V2 (mínimos y alertas "Por agotarse"), C1 y C2 (clientes).
+
+## 6. Estado (2026-11-25): V2 hecho
+- API: migración `0020` (`core_negocio.minimo_defecto`: 2 en tiendas, 0 en restaurantes); la mercadería nueva
+  nace con ese mínimo y se puede aplicar a la existente (`PUT /v1/negocios/{id}/ventas` con `minimo_defecto` y
+  `aplicar_a_todos`). Cada ítem y variante trae `alerta_existencia` ("agotado", "poco" o nulo);
+  `GET /v1/inventario/alertas` junta productos (por talla) e ingredientes; la venta devuelve `por_agotarse`.
+- App: "Quedan N · por agotarse" en Vender, aviso "Te queda poco de…" al cobrar, tarjeta "Por agotarse" en el
+  Inicio (con "Ver mi inventario") y el mínimo en Más → "Si no hay inventario".
+- Sigue: C1 y C2 (clientes).

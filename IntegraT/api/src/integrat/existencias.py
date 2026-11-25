@@ -28,6 +28,9 @@ from integrat.db.tablas import (
 
 BLOQUEAR = "bloquear"
 AVISAR = "avisar"
+AGOTADO = "agotado"
+POCO = "poco"  # por agotarse: algún insumo llegó a su mínimo
+_GRAVEDAD = {AGOTADO: 0, POCO: 1}
 
 
 class SinExistencia(Exception):
@@ -75,7 +78,7 @@ def _lineas(con: Connection, ctx: ais.ContextoNegocio, item_ids: list[uuid.UUID]
                         ops_receta_linea.c.item_variante_id, ops_receta_linea.c.insumo_id,
                         ops_receta_linea.c.cantidad,
                         cat_unidad_medida.c.factor_a_base.label("factor"),
-                        ops_insumo.c.existencia_base)
+                        ops_insumo.c.existencia_base, ops_insumo.c.stock_minimo_base)
         .select_from(
             ops_receta_linea
             .join(ops_insumo, sa.and_(ops_insumo.c.id == ops_receta_linea.c.insumo_id,
@@ -127,6 +130,92 @@ def disponibles(con: Connection, ctx: ais.ContextoNegocio, item_ids: list[uuid.U
         valores = [por_variante[v.id] for v in explicitas if por_variante[v.id] is not None]
         por_item[item_id] = sum(valores) if valores else None
     return por_item, por_variante
+
+
+def _estado(lineas, disponible: int | None) -> str | None:
+    if disponible is None:
+        return None
+    if disponible <= 0:
+        return AGOTADO
+    if any(x.stock_minimo_base > 0 and x.existencia_base <= x.stock_minimo_base for x in lineas):
+        return POCO
+    return None
+
+
+def _peor(estados: list[str | None]) -> str | None:
+    presentes = [e for e in estados if e is not None]
+    return min(presentes, key=_GRAVEDAD.get) if presentes else None
+
+
+def estados(con: Connection, ctx: ais.ContextoNegocio, item_ids: list[uuid.UUID]
+            ) -> tuple[dict[uuid.UUID, str | None], dict[uuid.UUID, str | None]]:
+    """"agotado", "poco" o None por ítem y por variante (el ítem toma el peor de sus variantes)."""
+    if not item_ids:
+        return {}, {}
+    variantes = con.execute(
+        ais.seleccionar(ctx, ops_item_variante, ops_item_variante.c.id,
+                        ops_item_variante.c.item_id, ops_item_variante.c.atributos)
+        .where(ops_item_variante.c.item_id.in_(item_ids))
+    ).all()
+    lineas = _lineas(con, ctx, item_ids)
+    por_variante: dict[uuid.UUID, str | None] = {}
+    por_item: dict[uuid.UUID, str | None] = {}
+    agrupadas: dict[uuid.UUID, list] = defaultdict(list)
+    for v in variantes:
+        agrupadas[v.item_id].append(v)
+    for item_id, filas in agrupadas.items():
+        for v in filas:
+            suyas = [x for x in lineas
+                     if x.item_id == item_id and x.item_variante_id in (None, v.id)]
+            por_variante[v.id] = _estado(suyas, _disponible(suyas))
+        explicitas = [v for v in filas if v.atributos is not None] or filas
+        por_item[item_id] = _peor([por_variante[v.id] for v in explicitas])
+    return por_item, por_variante
+
+
+def alertas(con: Connection, ctx: ais.ContextoNegocio) -> dict:
+    """Lo agotado o por agotarse: productos (por variante) e ingredientes, lo agotado primero."""
+    from integrat.db.tablas import ops_item  # aquí: evita un ciclo al importar
+
+    items = con.execute(ais.seleccionar(ctx, ops_item, ops_item.c.id, ops_item.c.nombre)).all()
+    nombres = {i.id: i.nombre for i in items}
+    _, por_variante = estados(con, ctx, list(nombres))
+    _, disponibles_var = disponibles(con, ctx, list(nombres))
+    variantes = con.execute(
+        ais.seleccionar(ctx, ops_item_variante, ops_item_variante.c.id,
+                        ops_item_variante.c.item_id, ops_item_variante.c.nombre,
+                        ops_item_variante.c.atributos)
+        .where(ops_item_variante.c.item_id.in_(list(nombres)))
+    ).all() if nombres else []
+    con_atributos = {v.item_id for v in variantes if v.atributos is not None}
+    productos = []
+    for v in variantes:
+        if v.atributos is None and v.item_id in con_atributos:
+            continue  # la implícita de un producto con tallas no cuenta
+        estado = por_variante.get(v.id)
+        if estado is None:
+            continue
+        nombre = nombres[v.item_id] if v.atributos is None else f"{nombres[v.item_id]} · {v.nombre}"
+        productos.append({"item_id": v.item_id, "item_variante_id": v.id, "nombre": nombre,
+                          "disponible": disponibles_var.get(v.id), "estado": estado})
+    ingredientes = []
+    for i in con.execute(
+        ais.seleccionar(ctx, ops_insumo, ops_insumo.c.id, ops_insumo.c.nombre,
+                        ops_insumo.c.existencia_base, ops_insumo.c.stock_minimo_base,
+                        ops_insumo.c.unidad_codigo)
+        .where(ops_insumo.c.item_id.is_(None))
+    ):
+        if i.existencia_base <= 0:
+            estado = AGOTADO
+        elif i.stock_minimo_base > 0 and i.existencia_base <= i.stock_minimo_base:
+            estado = POCO
+        else:
+            continue
+        ingredientes.append({"insumo_id": i.id, "nombre": i.nombre, "estado": estado,
+                             "unidad_codigo": i.unidad_codigo})
+    orden = lambda x: (_GRAVEDAD[x["estado"]], x["nombre"].casefold())  # noqa: E731
+    return {"productos": sorted(productos, key=orden),
+            "ingredientes": sorted(ingredientes, key=orden)}
 
 
 # ------------------------------------------------------------------ al vender

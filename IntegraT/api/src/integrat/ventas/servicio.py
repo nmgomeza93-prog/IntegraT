@@ -177,7 +177,10 @@ def crear_venta(con: Connection, ctx: ais.ContextoNegocio, datos: VentaIn) -> Ve
     }))
     faltantes = recetas.consumir_por_venta(con, ctx, venta_id, dict(vendidas))
     contabilidad.asentar_venta(con, ctx, venta_id)  # al final: el libro se bloquea de último
-    return obtener_venta(con, ctx, venta_id).model_copy(update={"insumos_en_falta": faltantes})
+    _, estados = existencias.estados(con, ctx, list({i for i, _ in vendidas}))
+    por_agotarse = sorted(nombres[k] for k in vendidas if estados.get(k[1]) is not None)
+    return obtener_venta(con, ctx, venta_id).model_copy(
+        update={"insumos_en_falta": faltantes, "por_agotarse": por_agotarse})
 
 
 def _huella(datos: VentaIn) -> str:

@@ -260,7 +260,8 @@ def variantes_de(con: Connection, ctx: ais.ContextoNegocio,
     return resultado
 
 
-def variante_out(f, precio=None, disponible: int | None = None) -> VarianteOut:
+def variante_out(f, precio=None, disponible: int | None = None,
+                 alerta: str | None = None) -> VarianteOut:
     return VarianteOut(
         id=f.id, nombre=f.nombre, atributos=dict(f.atributos or {}), codigo=f.codigo,
         precio_venta=f"{Decimal(f.precio_venta):.2f}",
@@ -268,6 +269,7 @@ def variante_out(f, precio=None, disponible: int | None = None) -> VarianteOut:
         else f"{precio.precio_sugerido:.2f}",
         aviso_precio=None if precio is None else precio.aviso,
         disponible=disponible,
+        alerta_existencia=alerta,
     )
 
 

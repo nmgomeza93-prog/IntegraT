@@ -6,10 +6,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy.engine import Engine
 
+from integrat import existencias
 from integrat.auth.dependencias import AccesoNegocio, acceso_negocio
 from integrat.dependencias import obtener_engine
 from integrat.insumos import mercaderia, recetas, servicio
 from integrat.insumos.esquemas import (
+    AlertasOut,
     InsumoCambios,
     InsumoIn,
     InsumoOut,
@@ -231,3 +233,11 @@ def guardar_mercaderia(item_id: uuid.UUID, datos: MercaderiaIn, acceso: Acceso,
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             "Este producto ya tiene una receta. Quítala primero para comprarlo hecho.") from None
+
+
+@router.get("/inventario/alertas", response_model=AlertasOut,
+            summary="Lo agotado o por agotarse (productos e ingredientes)")
+def alertas(acceso: Acceso, engine: Motor) -> AlertasOut:
+    _exigir(acceso, ROLES_QUE_VEN)
+    with engine.connect() as con:
+        return AlertasOut(**existencias.alertas(con, acceso.contexto))

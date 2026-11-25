@@ -174,3 +174,65 @@ def test_solo_dueno_o_administrador_cambia_la_regla(tienda, bd_migrada):
         con.execute(sa.text("UPDATE core_membresia SET rol = 'cajero' "
                             "WHERE negocio_id = UUID_TO_BIN(:n)"), {"n": negocio["id"]})
     assert regla(cliente, negocio, h, "avisar").status_code == 403
+
+
+# ------------------------------------------------------------------ V2: mínimos y alertas
+
+
+def test_la_mercaderia_nace_con_el_minimo_del_negocio(tienda):
+    cliente, negocio, h = tienda
+    assert cliente.get(f"/v1/negocios/{negocio['id']}",
+                       headers=h).json()["minimo_defecto"] == "2.00"
+    camisa = producto(cliente, h)
+    assert insumo_de(cliente, h, camisa)["stock_minimo"] == "2"
+
+
+def test_agotado_por_agotarse_y_bien(tienda):
+    cliente, _, h = tienda
+    camisa = producto(cliente, h)
+    alerta = lambda: cliente.get(f"/v1/items/{camisa['id']}", headers=h).json()["alerta_existencia"]  # noqa: E731
+    assert alerta() == "agotado"
+    comprar(cliente, h, insumo_de(cliente, h, camisa), 2)
+    assert alerta() == "poco"
+    comprar(cliente, h, insumo_de(cliente, h, camisa), 5)
+    assert alerta() is None
+
+
+def test_la_venta_avisa_lo_que_queda_por_agotarse(tienda):
+    cliente, _, h = tienda
+    camisa, gorra = producto(cliente, h), producto(cliente, h, "Gorra", "50")
+    comprar(cliente, h, insumo_de(cliente, h, camisa), 4)
+    comprar(cliente, h, insumo_de(cliente, h, gorra), 10)
+    r = vender(cliente, h, (camisa, 2, None), (gorra, 1, None))
+    assert r.status_code == 201 and r.json()["por_agotarse"] == ["Camisa"]
+
+
+def test_las_alertas_juntan_productos_por_talla_e_ingredientes(tienda, restaurante):
+    cliente, _, h = tienda
+    pijama = producto(cliente, h, "Pijama", "115")
+    cliente.put(f"/v1/items/{pijama['id']}/variantes", headers=h, json={"variantes": [
+        {"atributos": {"Talla": "S"}, "precio_venta": "115"},
+        {"atributos": {"Talla": "M"}, "precio_venta": "115"}]})
+    comprar(cliente, h, insumo_de(cliente, h, pijama, "Pijama · M"), 1)
+    a = cliente.get("/v1/inventario/alertas", headers=h).json()
+    assert [(p["nombre"], p["estado"], p["disponible"]) for p in a["productos"]] == [
+        ("Pijama · S", "agotado", 0), ("Pijama · M", "poco", 1)]
+    # Restaurante: los ingredientes en su mínimo también avisan.
+    otro, _, h2 = restaurante
+    otro.post("/v1/insumos", headers=h2, json={
+        "nombre": "Pollo", "unidad_codigo": "LB", "stock_minimo": "5",
+        "existencia_inicial": "3", "costo_total_inicial": "45"})
+    otro.post("/v1/insumos", headers=h2, json={"nombre": "Sal", "unidad_codigo": "LB"})
+    ing = otro.get("/v1/inventario/alertas", headers=h2).json()["ingredientes"]
+    assert [(i["nombre"], i["estado"]) for i in ing] == [("Sal", "agotado"), ("Pollo", "poco")]
+
+
+def test_cambiar_el_minimo_y_aplicarlo_a_todo(tienda):
+    cliente, negocio, h = tienda
+    camisa = producto(cliente, h)
+    r = cliente.put(f"/v1/negocios/{negocio['id']}/ventas", headers=h, json={
+        "vender_sin_existencia": "bloquear", "minimo_defecto": "5", "aplicar_a_todos": True})
+    assert r.status_code == 204
+    assert insumo_de(cliente, h, camisa)["stock_minimo"] == "5"
+    gorra = producto(cliente, h, "Gorra", "50")
+    assert insumo_de(cliente, h, gorra)["stock_minimo"] == "5"

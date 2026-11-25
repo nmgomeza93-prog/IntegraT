@@ -253,8 +253,10 @@ def _consulta_items(ctx: ais.ContextoNegocio, incluir_eliminados: bool = False) 
 
 def _item_out(fila, aviso: str | None = None, precio: precios.InfoPrecio | None = None,
               de_variantes: list | None = None, por_variante: dict | None = None,
-              stock: tuple[dict, dict] | None = None) -> ItemOut:
+              stock: tuple[dict, dict] | None = None,
+              alertas: tuple[dict, dict] | None = None) -> ItemOut:
     stock_item, stock_var = stock or ({}, {})
+    alerta_item, alerta_var = alertas or ({}, {})
     extra = {}
     if precio is not None:
         extra = {
@@ -269,8 +271,10 @@ def _item_out(fila, aviso: str | None = None, precio: precios.InfoPrecio | None 
         precio_venta=fila.precio_venta, se_vende=bool(fila.se_vende),
         archivado=fila.eliminado_en is not None, version=fila.version, aviso=aviso,
         tiene_variantes=bool(de_variantes),
-        variantes=[variantes.variante_out(v, (por_variante or {}).get(v.id), stock_var.get(v.id))
+        variantes=[variantes.variante_out(v, (por_variante or {}).get(v.id), stock_var.get(v.id),
+                                          alerta_var.get(v.id))
                    for v in de_variantes or []],
+        alerta_existencia=alerta_item.get(fila.id),
         controla_inventario=stock_item.get(fila.id) is not None,
         disponible=stock_item.get(fila.id), **extra,
     )
@@ -284,7 +288,8 @@ def obtener_item(con: Connection, ctx: ais.ContextoNegocio, item_id: uuid.UUID,
     por_item, por_variante = precios.calcular(con, ctx, [item_id])
     return _item_out(fila, aviso, por_item.get(item_id),
                      variantes.variantes_de(con, ctx, [item_id])[item_id], por_variante,
-                     existencias.disponibles(con, ctx, [item_id]))
+                     existencias.disponibles(con, ctx, [item_id]),
+                     existencias.estados(con, ctx, [item_id]))
 
 
 def listar_items(con: Connection, ctx: ais.ContextoNegocio, *, categoria_id: uuid.UUID | None,
@@ -307,9 +312,10 @@ def listar_items(con: Connection, ctx: ais.ContextoNegocio, *, categoria_id: uui
     info, por_variante = precios.calcular(con, ctx, ids)
     de_variantes = variantes.variantes_de(con, ctx, ids)
     stock = existencias.disponibles(con, ctx, ids)
+    alertas = existencias.estados(con, ctx, ids)
     return ListaItemsOut(total=total, items=[
         _item_out(f, precio=info.get(f.id), de_variantes=de_variantes[f.id],
-                  por_variante=por_variante, stock=stock) for f in filas])
+                  por_variante=por_variante, stock=stock, alertas=alertas) for f in filas])
 
 
 def asegurar_mercaderia(con: Connection, ctx: ais.ContextoNegocio) -> int:

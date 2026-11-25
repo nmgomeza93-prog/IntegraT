@@ -60,6 +60,7 @@ class VentaOut(_Dinero):
     anulada_en: datetime | None = None
     motivo_anulacion: str | None = None
     insumos_en_falta: list[str] = []  # solo al cobrar: insumos que se acabaron con esta venta
+    por_agotarse: list[str] = []  # lo vendido que quedó en su mínimo o en cero
 
 
 class ResumenOut(BaseModel):

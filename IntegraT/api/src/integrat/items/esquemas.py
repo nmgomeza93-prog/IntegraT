@@ -90,6 +90,7 @@ class ItemOut(BaseModel):
     # Inventario: cuánto queda (sumando sus variantes); None = no controla inventario.
     controla_inventario: bool = False
     disponible: int | None = None
+    alerta_existencia: str | None = None  # "agotado", "poco" (por agotarse) o None
 
     @field_serializer("precio_venta")
     def _precio_como_texto(self, valor: Decimal) -> str:

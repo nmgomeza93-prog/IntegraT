@@ -476,3 +476,8 @@
 .existencia--agotado { color: var(--color-alerta); font-weight: 600; }
 .lista-opciones__item--agotado { opacity: 0.55; cursor: not-allowed; }
 .opcion-variante:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* V2: por agotarse */
+.existencia--poco { color: var(--color-atencion); font-weight: 600; }
+.por-agotarse { display: grid; gap: var(--esp-2); }
+.por-agotarse .boton-secundario { width: 100%; }

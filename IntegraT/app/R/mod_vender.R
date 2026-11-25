@@ -50,13 +50,29 @@ mod_vender_ui <- function(id, vocab) {
 
 # Texto y estado de la existencia de un producto o variante (lo calcula la API).
 # `bloquea`: el negocio no vende lo que no hay. Devuelve list(texto, agotado).
-estado_existencia <- function(disponible, controla, bloquea) {
+estado_existencia <- function(disponible, controla, bloquea, alerta = NULL) {
   if (!isTRUE(controla) && is.null(disponible)) {
-    return(list(texto = if (bloquea) "Sin inventario" else NULL, agotado = bloquea))
+    return(list(texto = if (bloquea) "Sin inventario" else NULL, agotado = bloquea, poco = FALSE))
   }
   n <- as.integer(disponible %||% 0L)
-  if (n <= 0) return(list(texto = "Agotado", agotado = bloquea))
-  list(texto = paste("Quedan", n), agotado = FALSE)
+  if (n <= 0) return(list(texto = "Agotado", agotado = bloquea, poco = FALSE))
+  poco <- identical(alerta, "poco")
+  list(texto = paste0("Quedan ", n, if (poco) " \u00b7 por agotarse"), agotado = FALSE, poco = poco)
+}
+
+# Aviso después de cobrar: lo vendido que quedó en su mínimo (lo calcula la API).
+aviso_por_agotarse <- function(nombres) {
+  nombres <- unlist(nombres)
+  if (length(nombres) == 0) return(NULL)
+  lista <- if (length(nombres) == 1) nombres else {
+    paste0(paste(utils::head(nombres, -1), collapse = ", "), " y ", utils::tail(nombres, 1))
+  }
+  htmltools::tags$section(
+    class = "tarjeta aviso-insumos", role = "status",
+    etiqueta_estado("Por agotarse", "atencion"),
+    htmltools::tags$p(class = "entrada__texto", paste0(
+      "Te queda poco de: ", lista, ". Compra o importa para no quedarte sin."))
+  )
 }
 
 mod_vender_server <- function(id, s, ir_a) {
@@ -223,7 +239,8 @@ mod_vender_server <- function(id, s, ir_a) {
         htmltools::tags$div(
           class = "elegir-variante__opciones",
           lapply(item$variantes, function(x) {
-            ex <- estado_existencia(x$disponible, !is.null(x$disponible), bloquea())
+            ex <- estado_existencia(x$disponible, !is.null(x$disponible), bloquea(),
+                                    x$alerta_existencia)
             htmltools::tags$button(
               type = "button", class = "opcion-variante",
               disabled = if (isTRUE(ex$agotado)) NA,
@@ -261,7 +278,8 @@ mod_vender_server <- function(id, s, ir_a) {
             class = "lista-opciones",
             lapply(g$items, function(i) {
               n <- en_carrito_de(i$id)
-              ex <- estado_existencia(i$disponible, i$controla_inventario, bloquea())
+              ex <- estado_existencia(i$disponible, i$controla_inventario, bloquea(),
+                                      i$alerta_existencia)
               item_lista(
                 "tag", i$nombre,
                 htmltools::tagList(
@@ -269,7 +287,8 @@ mod_vender_server <- function(id, s, ir_a) {
                     htmltools::tags$span(
                       class = paste("existencia", if (identical(ex$texto, "Agotado") ||
                                                         identical(ex$texto, "Sin inventario"))
-                        "existencia--agotado"), ex$texto)
+                        "existencia--agotado" else if (isTRUE(ex$poco)) "existencia--poco"),
+                      ex$texto)
                   },
                   if (!is.null(n)) htmltools::tags$span(class = "cantidad-insignia", paste0("×", n)),
                   if (isTRUE(i$tiene_variantes)) "desde ",
@@ -365,6 +384,7 @@ mod_vender_server <- function(id, s, ir_a) {
           paste0("Venta ", venta$numero, " · ", MEDIOS_PAGO_UI[[venta$medio_pago]]$titulo)
         ),
         aviso_insumos_en_falta(venta$insumos_en_falta),
+        aviso_por_agotarse(venta$por_agotarse),
         if (por_deshacer()) {
           htmltools::tags$section(
             class = "tarjeta",

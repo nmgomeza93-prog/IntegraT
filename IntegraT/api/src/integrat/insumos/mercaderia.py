@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from sqlalchemy.engine import Connection
 
 from integrat.db import aislamiento as ais
-from integrat.db.tablas import ops_insumo, ops_item_variante, ops_receta_linea
+from integrat.db.tablas import core_negocio, ops_insumo, ops_item_variante, ops_receta_linea
 from integrat.db.tipos import ahora_utc, uuid7
 from integrat.insumos import recetas
 from integrat.insumos import servicio as inventario
@@ -86,9 +86,11 @@ def activar(con: Connection, ctx: ais.ContextoNegocio, item_id: uuid.UUID) -> Me
 def _crear_insumo(con, ctx, item_id: uuid.UUID, nombre: str,
                   variante_id: uuid.UUID | None) -> None:
     insumo_id = uuid7()
+    minimo = con.execute(sa.select(core_negocio.c.minimo_defecto)
+                         .where(core_negocio.c.id == ctx.negocio_id)).scalar_one()
     con.execute(ais.insertar(ctx, ops_insumo, {
         "id": insumo_id, "nombre": _nombre_libre(con, ctx, nombre), "unidad_codigo": UNIDAD,
-        "item_id": item_id, "item_variante_id": variante_id,
+        "item_id": item_id, "item_variante_id": variante_id, "stock_minimo_base": minimo,
     }))
     con.execute(ais.insertar(ctx, ops_receta_linea, {
         "id": uuid7(), "item_id": item_id, "insumo_id": insumo_id, "cantidad": 1,

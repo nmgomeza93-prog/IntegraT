@@ -136,12 +136,43 @@ tarjeta_meta <- function(r) {
   )
 }
 
+# Tarjeta "Por agotarse" con lo que dice GET /v1/inventario/alertas (máximo 5 renglones).
+tarjeta_por_agotarse <- function(alertas, ir_id) {
+  todos <- c(lapply(alertas$productos, function(p) list(nombre = p$nombre, estado = p$estado,
+                                                        n = p$disponible)),
+             lapply(alertas$ingredientes, function(i) list(nombre = i$nombre, estado = i$estado,
+                                                           n = NULL)))
+  if (length(todos) == 0) return(NULL)
+  agotados <- sum(vapply(todos, function(x) identical(x$estado, "agotado"), NA))
+  htmltools::tags$section(
+    class = "tarjeta por-agotarse", `aria-label` = "Por agotarse",
+    htmltools::tags$div(
+      class = "tarjeta-numero__etiqueta", htmltools::tags$span("Por agotarse"),
+      if (agotados > 0) etiqueta_estado(paste(agotados, if (agotados == 1) "agotado" else "agotados"),
+                                        "alerta")
+      else etiqueta_estado("Te queda poco", "atencion")),
+    htmltools::tags$ul(
+      class = "lista-opciones",
+      lapply(utils::head(todos, 5), function(x) {
+        fila_lista(if (identical(x$estado, "agotado")) "x-circle" else "exclamation-triangle",
+                   x$nombre,
+                   if (identical(x$estado, "agotado")) "Agotado"
+                   else if (!is.null(x$n)) paste("Quedan", x$n) else "Poco")
+      })
+    ),
+    if (length(todos) > 5) htmltools::tags$p(class = "entrada__texto",
+                                             paste("y", length(todos) - 5, "más")),
+    boton_secundario(ir_id, "Ver mi inventario", "box-seam")
+  )
+}
+
 mod_inicio_ui <- function(id, vocab, pasos = NULL) {
   ns <- shiny::NS(id)
   htmltools::tags$div(
     class = "pila",
     shiny::uiOutput(ns("pasos")),
     shiny::uiOutput(ns("hoy")),
+    shiny::uiOutput(ns("por_agotarse")),
     shiny::uiOutput(ns("meta")),
     shiny::uiOutput(ns("tu_mes")),
     shiny::uiOutput(ns("consejo"))
@@ -173,6 +204,17 @@ mod_inicio_server <- function(id, s, ir_a, seccion = shiny::reactive("inicio")) 
       tarjeta_hoy(h$ventas, h$caja, ns("abrir_caja"))
     })
     shiny::observeEvent(input$abrir_caja, ir_a("caja"))
+
+    output$por_agotarse <- shiny::renderUI({
+      shiny::req(s$negocio)
+      s$cuentas_v
+      s$catalogo_v
+      shiny::req(identical(seccion() %||% "inicio", "inicio"))
+      r <- sesion_llamar(s, "GET", "v1/inventario/alertas")
+      if (!r$ok) return(NULL)  # el cajero no ve el inventario
+      tarjeta_por_agotarse(r$cuerpo, ns("ver_inventario"))
+    })
+    shiny::observeEvent(input$ver_inventario, ir_a("inventario"))
 
     output$meta <- shiny::renderUI({
       r <- resultados()

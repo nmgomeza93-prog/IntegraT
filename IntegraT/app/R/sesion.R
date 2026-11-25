@@ -12,7 +12,8 @@ sesion_nueva <- function() {
     cuentas_v = 0L,  # sube cuando cambia algo que mueve las cuentas (para el resumen del Inicio)
     regimen_iva = NULL,  # el régimen elegido en "Tus impuestos" (si no, el del negocio)
     margen_objetivo = NULL,  # el margen elegido en "Tu margen de ganancia" (si no, el del negocio)
-    vender_sin_existencia = NULL  # la regla elegida en "Si no hay inventario" (si no, la del negocio)
+    vender_sin_existencia = NULL,  # la regla elegida en "Si no hay inventario" (si no, la del negocio)
+    minimo_defecto = NULL  # ídem, el mínimo por defecto
   )
 }
 
@@ -40,6 +41,7 @@ sesion_cerrar <- function(s) {
   s$regimen_iva <- NULL
   s$margen_objetivo <- NULL
   s$vender_sin_existencia <- NULL
+  s$minimo_defecto <- NULL
   invisible(s)
 }
 

@@ -117,6 +117,15 @@ def _regla_inicial(con: Connection, tipo: str) -> str:
     return contenido.get("vender_sin_existencia", "avisar")
 
 
+def _minimo_inicial(con: Connection, tipo: str):
+    contenido = con.execute(
+        sa.select(core_cfg_tipo_negocio_plantilla.c.contenido).where(
+            core_cfg_tipo_negocio_plantilla.c.tipo_negocio_codigo == tipo,
+            core_cfg_tipo_negocio_plantilla.c.tipo_plantilla == "operacion")
+    ).scalar_one_or_none() or {}
+    return contenido.get("minimo_defecto", 0)
+
+
 def crear_negocio(con: Connection, usuario_id: uuid.UUID, datos: NegocioIn) -> ais.ContextoNegocio:
     """Crea negocio + membresía de dueño + capacidades del tipo (+ titular si da factura).
 
@@ -150,6 +159,7 @@ def crear_negocio(con: Connection, usuario_id: uuid.UUID, datos: NegocioIn) -> a
         zona_horaria=pais.zona_horaria_defecto, moneda_codigo=pais.moneda_codigo,
         estado_onboarding={"da_factura": datos.da_factura, "pasos_hechos": []},
         vender_sin_existencia=_regla_inicial(con, tipo),
+        minimo_defecto=_minimo_inicial(con, tipo),
         creado_por=usuario_id,
     ))
     ctx = ais.ContextoNegocio(negocio_id, usuario_id)
@@ -176,8 +186,15 @@ def crear_negocio(con: Connection, usuario_id: uuid.UUID, datos: NegocioIn) -> a
 
 
 def fijar_reglas_venta(con: Connection, ctx: ais.ContextoNegocio, datos: ReglasVentaIn) -> None:
-    con.execute(sa.update(core_negocio).where(core_negocio.c.id == ctx.negocio_id).values(
-        vender_sin_existencia=datos.vender_sin_existencia, actualizado_por=ctx.usuario_id))
+    valores = {"vender_sin_existencia": datos.vender_sin_existencia,
+               "actualizado_por": ctx.usuario_id}
+    if datos.minimo_defecto is not None:
+        valores["minimo_defecto"] = datos.minimo_defecto
+    con.execute(sa.update(core_negocio).where(core_negocio.c.id == ctx.negocio_id)
+                .values(**valores))
+    if datos.minimo_defecto is not None and datos.aplicar_a_todos:
+        con.execute(ais.actualizar(ctx, ops_insumo, ops_insumo.c.item_id.is_not(None)).values(
+            stock_minimo_base=datos.minimo_defecto, actualizado_por=ctx.usuario_id))
 
 
 def fijar_precios(con: Connection, ctx: ais.ContextoNegocio, datos: PreciosIn) -> None:
@@ -298,5 +315,6 @@ def leer_negocio(con: Connection, ctx: ais.ContextoNegocio) -> NegocioOut | None
         regimen_iva=_regimen_simple(regimen),
         margen_objetivo=f"{negocio['margen_objetivo_defecto']:.4f}",
         vender_sin_existencia=negocio["vender_sin_existencia"],
+        minimo_defecto=f"{negocio['minimo_defecto']:.2f}",
         capacidades=list(capacidades), vocabulario=vocabulario, primeros_pasos=pasos,
     )

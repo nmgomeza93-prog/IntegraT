@@ -67,3 +67,4 @@ class VarianteOut(BaseModel):
     precio_sugerido: str | None = None
     aviso_precio: str | None = None
     disponible: int | None = None  # cuánto queda; None = no controla inventario
+    alerta_existencia: str | None = None  # "agotado", "poco" (por agotarse) o None
