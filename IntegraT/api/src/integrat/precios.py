@@ -75,29 +75,47 @@ def margen_del_negocio(con: Connection, ctx: ais.ContextoNegocio) -> Decimal:
         .where(core_negocio.c.id == ctx.negocio_id)).scalar_one())
 
 
-def para_items(con: Connection, ctx: ais.ContextoNegocio,
-               item_ids: list[uuid.UUID]) -> dict[uuid.UUID, InfoPrecio]:
-    """Costo, sugerido y aviso de varios ítems en pocas consultas (para la lista del catálogo)."""
+_GRAVEDAD = {"pierde": 0, "bajo": 1, "ok": 2}
+
+
+def _info(costo: Decimal | None, completo: bool, precio: Decimal, margen_obj: Decimal,
+          propio: bool, trat) -> InfoPrecio:
+    sugerido = margen_actual = aviso = None
+    if costo is not None and costo > 0 and completo:
+        sugerido = sugerir(costo, margen_obj, trat)
+        margen_actual, aviso = evaluar(precio, costo, margen_obj, trat)
+    return InfoPrecio(costo=costo, costo_completo=completo, margen_objetivo=margen_obj,
+                      margen_propio=propio, precio_sugerido=sugerido,
+                      margen_actual=margen_actual, aviso=aviso)
+
+
+def calcular(con: Connection, ctx: ais.ContextoNegocio, item_ids: list[uuid.UUID]
+             ) -> tuple[dict[uuid.UUID, InfoPrecio], dict[uuid.UUID, InfoPrecio]]:
+    """Costo, sugerido y aviso por ítem y por variante, en pocas consultas.
+
+    Cada variante cuesta las líneas comunes de la receta más las suyas (su mercadería). Un ítem
+    sin variantes toma la de su variante implícita; uno con variantes, el aviso más grave de ellas
+    (sin un sugerido único: cada variante tiene el suyo). Devuelve (por ítem, por variante).
+    """
     if not item_ids:
-        return {}
+        return {}, {}
     trat = tratamiento_iva(con, ctx)
     del_negocio = margen_del_negocio(con, ctx)
-    datos = {
-        f.id: f for f in con.execute(
-            ais.seleccionar(ctx, ops_item, ops_item.c.id, ops_item.c.margen_objetivo,
-                            ops_item_variante.c.precio_venta, incluir_eliminados=True)
-            .select_from(ops_item.join(ops_item_variante, sa.and_(
-                ops_item_variante.c.item_id == ops_item.c.id,
-                ops_item_variante.c.negocio_id == ctx.negocio_id,
-                ops_item_variante.c.eliminado_en.is_(None))))
-            .where(ops_item.c.id.in_(item_ids))
-        )
-    }
-    costos: dict[uuid.UUID, Decimal] = defaultdict(lambda: CERO)
-    completos: dict[uuid.UUID, bool] = defaultdict(lambda: True)
-    for f in con.execute(
+    variantes = con.execute(
+        ais.seleccionar(ctx, ops_item, ops_item.c.id.label("item_id"), ops_item.c.margen_objetivo,
+                        ops_item_variante.c.id.label("variante_id"),
+                        ops_item_variante.c.precio_venta, ops_item_variante.c.atributos,
+                        incluir_eliminados=True)
+        .select_from(ops_item.join(ops_item_variante, sa.and_(
+            ops_item_variante.c.item_id == ops_item.c.id,
+            ops_item_variante.c.negocio_id == ctx.negocio_id,
+            ops_item_variante.c.eliminado_en.is_(None))))
+        .where(ops_item.c.id.in_(item_ids))
+        .order_by(ops_item_variante.c.creado_en)
+    ).all()
+    lineas = con.execute(
         ais.seleccionar(ctx, ops_receta_linea, ops_receta_linea.c.item_id,
-                        ops_receta_linea.c.cantidad,
+                        ops_receta_linea.c.item_variante_id, ops_receta_linea.c.cantidad,
                         cat_unidad_medida.c.factor_a_base.label("factor"),
                         ops_insumo.c.costo_promedio_base,
                         ops_insumo.c.eliminado_en.label("insumo_archivado"))
@@ -108,24 +126,41 @@ def para_items(con: Connection, ctx: ais.ContextoNegocio,
             .join(cat_unidad_medida,
                   cat_unidad_medida.c.codigo == ops_receta_linea.c.unidad_codigo))
         .where(ops_receta_linea.c.item_id.in_(item_ids))
-    ):
-        costos[f.item_id] += f.cantidad * f.factor * f.costo_promedio_base
-        if f.costo_promedio_base == 0 and f.insumo_archivado is None:
-            completos[f.item_id] = False
+    ).all()
 
-    resultado: dict[uuid.UUID, InfoPrecio] = {}
-    for item_id, d in datos.items():
-        propio = d.margen_objetivo is not None
-        margen_obj = Decimal(d.margen_objetivo) if propio else del_negocio
-        tiene_receta = item_id in costos
-        costo = costos[item_id].quantize(CENTAVOS, ROUND_HALF_UP) if tiene_receta else None
-        completo = completos[item_id]
-        sugerido = margen_actual = aviso = None
-        if costo is not None and costo > 0 and completo:
-            sugerido = sugerir(costo, margen_obj, trat)
-            margen_actual, aviso = evaluar(Decimal(d.precio_venta), costo, margen_obj, trat)
-        resultado[item_id] = InfoPrecio(
-            costo=costo, costo_completo=completo, margen_objetivo=margen_obj,
-            margen_propio=propio, precio_sugerido=sugerido, margen_actual=margen_actual,
-            aviso=aviso)
-    return resultado
+    por_variante: dict[uuid.UUID, InfoPrecio] = {}
+    por_item: dict[uuid.UUID, InfoPrecio] = {}
+    agrupadas: dict[uuid.UUID, list] = defaultdict(list)
+    for v in variantes:
+        agrupadas[v.item_id].append(v)
+    for item_id, filas in agrupadas.items():
+        propio = filas[0].margen_objetivo is not None
+        margen_obj = Decimal(filas[0].margen_objetivo) if propio else del_negocio
+        con_atributos = [v for v in filas if v.atributos is not None]
+        for v in filas:
+            suyas = [x for x in lineas
+                     if x.item_id == item_id and x.item_variante_id in (None, v.variante_id)]
+            costo = (sum((x.cantidad * x.factor * x.costo_promedio_base for x in suyas), CERO)
+                     .quantize(CENTAVOS, ROUND_HALF_UP)) if suyas else None
+            completo = not any(x.costo_promedio_base == 0 and x.insumo_archivado is None
+                               for x in suyas)
+            por_variante[v.variante_id] = _info(costo, completo, Decimal(v.precio_venta),
+                                                margen_obj, propio, trat)
+        if not con_atributos:
+            por_item[item_id] = por_variante[filas[0].variante_id]
+            continue
+        infos = [por_variante[v.variante_id] for v in con_atributos]
+        avisos = [i.aviso for i in infos if i.aviso is not None]
+        costos = [i.costo for i in infos if i.costo is not None]
+        por_item[item_id] = InfoPrecio(
+            costo=min(costos) if costos else None,
+            costo_completo=all(i.costo_completo for i in infos), margen_objetivo=margen_obj,
+            margen_propio=propio, precio_sugerido=None, margen_actual=None,
+            aviso=min(avisos, key=_GRAVEDAD.get) if avisos else None)
+    return por_item, por_variante
+
+
+def para_items(con: Connection, ctx: ais.ContextoNegocio,
+               item_ids: list[uuid.UUID]) -> dict[uuid.UUID, InfoPrecio]:
+    """Costo, sugerido y aviso de varios ítems (para la lista del catálogo y la ficha)."""
+    return calcular(con, ctx, item_ids)[0]

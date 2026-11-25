@@ -17,6 +17,8 @@ MEDIOS_PAGO: tuple[str, ...] = ("efectivo", "tarjeta", "transferencia")
 
 class LineaIn(BaseModel):
     item_id: uuid.UUID
+    item_variante_id: uuid.UUID | None = Field(
+        default=None, description="Obligatoria si el producto tiene variantes (talla, color…).")
     cantidad: Annotated[int, Field(ge=1, le=999)]
 
 
@@ -39,6 +41,7 @@ class _Dinero(BaseModel):
 
 class LineaOut(_Dinero):
     item_id: uuid.UUID
+    item_variante_id: uuid.UUID | None = None
     nombre: str
     cantidad: int
     precio_unitario: Decimal

@@ -9,6 +9,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, StringConstraints, field_serializer
 
+from integrat.variantes.esquemas import VarianteOut
+
 NombreItem = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=120)]
 NombreCategoria = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=2, max_length=80)
@@ -40,6 +42,7 @@ class CategoriaOut(BaseModel):
     icono: str | None
     cantidad_items: int
     version: int
+    atributos: list[str] = []  # qué atributos usan sus productos (ej. Talla, Color)
 
 
 # ------------------------------------------------------------------ ítems
@@ -80,6 +83,10 @@ class ItemOut(BaseModel):
     aviso_precio: str | None = None   # "pierde", "bajo", "ok"
     margen_objetivo: str = "0.3500"   # el que se usa (propio o del negocio)
     margen_propio: bool = False
+    # Variantes de verdad (talla, color…). Sin variantes: lista vacía y el precio es el del ítem;
+    # con variantes, `precio_venta` es el más bajo ("desde").
+    tiene_variantes: bool = False
+    variantes: list[VarianteOut] = []
 
     @field_serializer("precio_venta")
     def _precio_como_texto(self, valor: Decimal) -> str:

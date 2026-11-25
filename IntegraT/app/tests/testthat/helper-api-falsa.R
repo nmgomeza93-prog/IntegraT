@@ -100,6 +100,12 @@ iniciar_api_falsa <- function(env = parent.frame()) {
     }
     estado$regimen <- "no_se"
     estado$margen <- "0.3500"
+    estado$atributos <- list(
+      list(id = "at-1", nombre = "Talla",
+           valores = lapply(c("S", "M", "L"), function(v) list(id = paste0("va-", v), valor = v))),
+      list(id = "at-2", nombre = "Color",
+           valores = lapply(c("Negro", "Rosa"), function(v) list(id = paste0("va-", v), valor = v))))
+    estado$variantes_creadas <- 0L
     estado$caja <- NULL          # la sesión abierta
     estado$cierres <- list()
     estado$cierres_hechos <- 0L
@@ -186,7 +192,8 @@ iniciar_api_falsa <- function(env = parent.frame()) {
       list(id = id, tipo_item = if (estado$tipo == "restaurante") "platillo" else "producto",
            nombre = nombre, descripcion = NULL, categoria_id = categoria_id,
            categoria_nombre = nombre_categoria(categoria_id), precio_venta = precio,
-           se_vende = TRUE, archivado = FALSE, version = version, aviso = NULL)
+           se_vende = TRUE, archivado = FALSE, version = version, aviso = NULL,
+           tiene_variantes = FALSE, variantes = list())
     }
     guardar_item <- function(it) {
       estado$items[[it$id]] <- it
@@ -428,6 +435,48 @@ iniciar_api_falsa <- function(env = parent.frame()) {
           return(json(503, list(detail = "El servicio no está listo. Intenta más tarde.")))
         }
         return(json(201, n))
+      }
+      if (ruta == "/v1/atributos" && metodo == "GET") {
+        return(json(200, estado$atributos))
+      }
+      if (startsWith(ruta, "/v1/items/") && endsWith(ruta, "/variantes") && metodo == "PUT") {
+        id <- sub("/variantes$", "", sub("^/v1/items/", "", ruta))
+        it <- estado$items[[id]]
+        if (is.null(it)) return(json(404, list(detail = "No encontramos eso.")))
+        d <- leer(req)
+        combos <- vapply(d$variantes, function(x) paste(tolower(unlist(x$atributos)), collapse = "|"), "")
+        if (any(duplicated(combos))) return(json(422, list(detail = "Hay dos variantes iguales.")))
+        if (any(vapply(d$variantes, function(x) length(x$atributos) == 0, NA))) {
+          return(json(422, list(detail = "Revisa los datos e intenta de nuevo.")))
+        }
+        it$variantes <- lapply(d$variantes, function(x) {
+          if (is.null(x$id)) {
+            estado$variantes_creadas <- estado$variantes_creadas + 1L
+            x$id <- paste0("var-", estado$variantes_creadas)
+          }
+          # valores nuevos se agregan al atributo
+          for (n in names(x$atributos)) {
+            for (k in seq_along(estado$atributos)) {
+              a <- estado$atributos[[k]]
+              if (identical(a$nombre, n) && !x$atributos[[n]] %in% vapply(a$valores, function(v) v$valor, "")) {
+                a$valores[[length(a$valores) + 1L]] <- list(id = paste0("va-", x$atributos[[n]]),
+                                                            valor = x$atributos[[n]])
+                estado$atributos[[k]] <- a
+              }
+            }
+          }
+          list(id = x$id, nombre = paste(unlist(x$atributos), collapse = " · "),
+               atributos = x$atributos, codigo = x$codigo,
+               precio_venta = sprintf("%.2f", as.numeric(x$precio_venta)),
+               precio_sugerido = NULL, aviso_precio = NULL)
+        })
+        it$tiene_variantes <- length(it$variantes) > 0
+        if (it$tiene_variantes) {
+          it$precio_venta <- sprintf("%.2f", min(vapply(it$variantes, function(x) as.numeric(x$precio_venta), 0)))
+        }
+        it$version <- it$version + 1L
+        guardar_item(it)
+        return(json(200, con_precio(it)))
       }
       if (grepl("^/v1/negocios/[^/]+/precios$", ruta) && metodo == "PUT") {
         d <- leer(req)
@@ -901,11 +950,21 @@ iniciar_api_falsa <- function(env = parent.frame()) {
           if (is.null(it)) {
             return(json(422, list(detail = "Alguno de los productos ya no está disponible. Revisa tu carrito.")))
           }
-          subtotal <- as.numeric(it$precio_venta) * l$cantidad
+          precio <- it$precio_venta
+          nombre <- it$nombre
+          if (isTRUE(it$tiene_variantes)) {
+            v <- Filter(function(x) identical(x$id, l$item_variante_id), it$variantes)
+            if (length(v) == 0) {
+              return(json(422, list(detail = "Elige la talla o el color de cada producto.")))
+            }
+            precio <- v[[1]]$precio_venta
+            nombre <- paste(it$nombre, "·", v[[1]]$nombre)
+          }
+          subtotal <- as.numeric(precio) * l$cantidad
           total <- total + subtotal
           armadas[[length(armadas) + 1L]] <- list(
-            item_id = it$id, nombre = it$nombre, cantidad = l$cantidad,
-            precio_unitario = it$precio_venta, total = sprintf("%.2f", subtotal))
+            item_id = it$id, item_variante_id = l$item_variante_id, nombre = nombre,
+            cantidad = l$cantidad, precio_unitario = precio, total = sprintf("%.2f", subtotal))
         }
         estado$ventas_creadas <- estado$ventas_creadas + 1L
         venta <- list(

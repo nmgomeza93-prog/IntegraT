@@ -1,7 +1,7 @@
 """Catálogo de productos y platillos. Todo acceso a tablas de negocio pasa por db.aislamiento.
 
-Cada ítem tiene una variante implícita ("Única") que guarda el precio de venta; la API todavía
-no expone variantes (docs/PLAN_CATALOGO.md).
+Cada ítem tiene una variante implícita ("Única") que guarda el precio de venta, o variantes de
+verdad con talla, color… (docs/PLAN_VARIANTES.md); su precio de lista es el más bajo.
 """
 
 import hashlib
@@ -33,6 +33,7 @@ from integrat.items.esquemas import (
     ItemOut,
     ListaItemsOut,
 )
+from integrat.variantes import servicio as variantes
 
 OPERACION_CREAR_ITEM = "crear_item"
 VIGENCIA_IDEMPOTENCIA = timedelta(hours=24)
@@ -65,9 +66,10 @@ def _escapar_like(texto: str) -> str:
 
 # ------------------------------------------------------------------ categorías
 
-def _categoria_out(fila) -> CategoriaOut:
+def _categoria_out(fila, atributos: list[str] | None = None) -> CategoriaOut:
     return CategoriaOut(id=fila.id, nombre=fila.nombre, orden=fila.orden, icono=fila.icono,
-                        cantidad_items=fila.cantidad_items, version=fila.version)
+                        cantidad_items=fila.cantidad_items, version=fila.version,
+                        atributos=atributos or [])
 
 
 def _consulta_categorias(ctx: ais.ContextoNegocio) -> sa.Select:
@@ -88,7 +90,8 @@ def listar_categorias(con: Connection, ctx: ais.ContextoNegocio) -> list[Categor
     filas = con.execute(
         _consulta_categorias(ctx).order_by(ops_categoria.c.orden, ops_categoria.c.nombre)
     ).all()
-    return [_categoria_out(f) for f in filas]
+    atributos = variantes.atributos_de_categorias(con, ctx, [f.id for f in filas])
+    return [_categoria_out(f, atributos[f.id]) for f in filas]
 
 
 def _categoria_existe(con: Connection, ctx: ais.ContextoNegocio, categoria_id: uuid.UUID) -> bool:
@@ -118,9 +121,10 @@ def crear_categoria(con: Connection, ctx: ais.ContextoNegocio, datos: CategoriaI
         "id": categoria_id, "nombre": datos.nombre, "icono": datos.icono,
         "orden": 0 if ultimo is None else ultimo + 1,
     }))
+    variantes.aplicar_sugerencia(con, ctx, categoria_id, datos.nombre)  # Ropa -> talla y color
     return _categoria_out(con.execute(
         _consulta_categorias(ctx).where(ops_categoria.c.id == categoria_id)
-    ).one())
+    ).one(), variantes.atributos_de_categorias(con, ctx, [categoria_id])[categoria_id])
 
 
 def actualizar_categoria(con: Connection, ctx: ais.ContextoNegocio, categoria_id: uuid.UUID,
@@ -220,11 +224,16 @@ def _tipo_item_del_negocio(con: Connection, ctx: ais.ContextoNegocio) -> str:
 
 
 def _consulta_items(ctx: ais.ContextoNegocio, incluir_eliminados: bool = False) -> sa.Select:
-    variante = sa.and_(
-        ops_item_variante.c.item_id == ops_item.c.id,
-        ops_item_variante.c.negocio_id == ctx.negocio_id,
-        sa.true() if incluir_eliminados else ops_item_variante.c.eliminado_en.is_(None),
+    # Un renglón por ítem: el precio de lista es el más bajo de sus variantes vivas.
+    precios_vivos = (
+        sa.select(ops_item_variante.c.item_id,
+                  sa.func.min(ops_item_variante.c.precio_venta).label("precio_venta"))
+        .where(ops_item_variante.c.negocio_id == ctx.negocio_id,
+               sa.true() if incluir_eliminados else ops_item_variante.c.eliminado_en.is_(None))
+        .group_by(ops_item_variante.c.item_id)
+        .subquery("precio_item")
     )
+    variante = precios_vivos.c.item_id == ops_item.c.id
     categoria = sa.and_(
         ops_categoria.c.id == ops_item.c.categoria_id,
         ops_categoria.c.negocio_id == ctx.negocio_id,
@@ -233,16 +242,16 @@ def _consulta_items(ctx: ais.ContextoNegocio, incluir_eliminados: bool = False) 
         ctx, ops_item,
         ops_item.c.id, ops_item.c.tipo_item, ops_item.c.nombre, ops_item.c.descripcion,
         ops_item.c.categoria_id, ops_categoria.c.nombre.label("categoria_nombre"),
-        ops_item_variante.c.precio_venta, ops_item.c.se_vende, ops_item.c.version,
+        precios_vivos.c.precio_venta, ops_item.c.se_vende, ops_item.c.version,
         ops_item.c.eliminado_en,
         incluir_eliminados=incluir_eliminados,
     ).select_from(
-        ops_item.join(ops_item_variante, variante).outerjoin(ops_categoria, categoria)
+        ops_item.join(precios_vivos, variante).outerjoin(ops_categoria, categoria)
     )
 
 
-def _item_out(fila, aviso: str | None = None,
-              precio: precios.InfoPrecio | None = None) -> ItemOut:
+def _item_out(fila, aviso: str | None = None, precio: precios.InfoPrecio | None = None,
+              de_variantes: list | None = None, por_variante: dict | None = None) -> ItemOut:
     extra = {}
     if precio is not None:
         extra = {
@@ -255,7 +264,10 @@ def _item_out(fila, aviso: str | None = None,
         id=fila.id, tipo_item=fila.tipo_item, nombre=fila.nombre, descripcion=fila.descripcion,
         categoria_id=fila.categoria_id, categoria_nombre=fila.categoria_nombre,
         precio_venta=fila.precio_venta, se_vende=bool(fila.se_vende),
-        archivado=fila.eliminado_en is not None, version=fila.version, aviso=aviso, **extra,
+        archivado=fila.eliminado_en is not None, version=fila.version, aviso=aviso,
+        tiene_variantes=bool(de_variantes),
+        variantes=[variantes.variante_out(v, (por_variante or {}).get(v.id))
+                   for v in de_variantes or []], **extra,
     )
 
 
@@ -264,7 +276,9 @@ def obtener_item(con: Connection, ctx: ais.ContextoNegocio, item_id: uuid.UUID,
     fila = con.execute(_consulta_items(ctx).where(ops_item.c.id == item_id)).first()
     if fila is None:
         raise NoEncontrado
-    return _item_out(fila, aviso, precios.para_items(con, ctx, [item_id]).get(item_id))
+    por_item, por_variante = precios.calcular(con, ctx, [item_id])
+    return _item_out(fila, aviso, por_item.get(item_id),
+                     variantes.variantes_de(con, ctx, [item_id])[item_id], por_variante)
 
 
 def listar_items(con: Connection, ctx: ais.ContextoNegocio, *, categoria_id: uuid.UUID | None,
@@ -283,8 +297,12 @@ def listar_items(con: Connection, ctx: ais.ContextoNegocio, *, categoria_id: uui
     filas = con.execute(
         consulta.order_by(ops_item.c.nombre, ops_item.c.id).limit(limite).offset(desplazar)
     ).all()
-    info = precios.para_items(con, ctx, [f.id for f in filas])
-    return ListaItemsOut(total=total, items=[_item_out(f, precio=info.get(f.id)) for f in filas])
+    ids = [f.id for f in filas]
+    info, por_variante = precios.calcular(con, ctx, ids)
+    de_variantes = variantes.variantes_de(con, ctx, ids)
+    return ListaItemsOut(total=total, items=[
+        _item_out(f, precio=info.get(f.id), de_variantes=de_variantes[f.id],
+                  por_variante=por_variante) for f in filas])
 
 
 def _aviso_nombre_repetido(con, ctx, nombre: str, tipo_item: str,

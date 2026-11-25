@@ -46,6 +46,9 @@ def cobrar(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "Alguno de los productos ya no está disponible. Revisa tu carrito.",
         ) from None
+    except servicio.FaltaVariante:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            "Elige la talla o el color de cada producto.") from None
     except servicio.ClaveReutilizada:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             "Esa clave ya se usó con otros datos.") from None

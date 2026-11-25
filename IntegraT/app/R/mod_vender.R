@@ -52,7 +52,9 @@ mod_vender_server <- function(id, s, ir_a) {
   shiny::moduleServer(id, function(input, output, session) {
     ns <- session$ns
     vista <- shiny::reactiveVal("catalogo")  # "catalogo", "cobro", "listo" o "hoy"
-    carrito <- shiny::reactiveVal(list())    # id del ítem -> cantidad
+    # Clave "id del ítem" o "id del ítem|id de la variante" (talla, color…) -> cantidad
+    carrito <- shiny::reactiveVal(list())
+    eligiendo <- shiny::reactiveVal(NULL)    # el producto con variantes del que se elige talla/color
     medio <- shiny::reactiveVal("efectivo")  # el último usado queda elegido
     error <- shiny::reactiveVal(NULL)
     ultima <- shiny::reactiveVal(NULL)       # la venta recién cobrada (respuesta de la API)
@@ -68,6 +70,7 @@ mod_vender_server <- function(id, s, ir_a) {
     shiny::observeEvent(s$negocio_id, {
       vista("catalogo")
       carrito(list())
+      eligiendo(NULL)
       medio("efectivo")
       error(NULL)
       ultima(NULL)
@@ -96,15 +99,32 @@ mod_vender_server <- function(id, s, ir_a) {
     lineas_carrito <- function() {
       items <- items_por_id()
       lineas <- list()
-      for (id in names(carrito())) {
-        item <- items[[id]]
+      for (clave in names(carrito())) {
+        partes <- strsplit(clave, "|", fixed = TRUE)[[1]]
+        item <- items[[partes[1]]]
         if (is.null(item)) next
+        nombre <- item$nombre
+        precio <- as.numeric(item$precio_venta)
+        variante_id <- if (length(partes) > 1) partes[2] else NULL
+        if (!is.null(variante_id)) {
+          variante <- Filter(function(x) identical(x$id, variante_id), item$variantes %||% list())
+          if (length(variante) == 0) next  # la variante ya no existe
+          nombre <- paste(item$nombre, "·", variante[[1]]$nombre)
+          precio <- as.numeric(variante[[1]]$precio_venta)
+        }
         lineas[[length(lineas) + 1L]] <- list(
-          id = id, nombre = item$nombre, cantidad = carrito()[[id]],
-          precio = as.numeric(item$precio_venta)
+          id = clave, item_id = partes[1], variante_id = variante_id, nombre = nombre,
+          cantidad = carrito()[[clave]], precio = precio
         )
       }
       lineas
+    }
+
+    # Cuántas unidades de un producto hay en el carrito (sumando sus variantes).
+    en_carrito_de <- function(item_id) {
+      claves <- names(carrito()) %||% character()
+      propias <- claves[claves == item_id | startsWith(claves, paste0(item_id, "|"))]
+      if (length(propias) == 0) NULL else sum(unlist(carrito()[propias]))
     }
 
     # Clave de idempotencia: el mismo carrito y medio en el mismo intento = la misma venta (un
@@ -161,10 +181,35 @@ mod_vender_server <- function(id, s, ir_a) {
                              width = "100%")
           )
         },
+        shiny::uiOutput(ns("elegir_variante")),
         shiny::uiOutput(ns("grilla")),
         shiny::uiOutput(ns("barra"))
       )
     }
+
+    # Elegir talla/color de un producto con variantes (aparece arriba de la lista).
+    output$elegir_variante <- shiny::renderUI({
+      item <- items_por_id()[[eligiendo() %||% ""]]
+      if (is.null(item)) return(NULL)
+      htmltools::tags$section(
+        class = "tarjeta elegir-variante", `aria-label` = paste("Elegir", item$nombre),
+        htmltools::tags$h2(class = "hoja__titulo", paste0(item$nombre, ": ¿cuál?")),
+        htmltools::tags$div(
+          class = "elegir-variante__opciones",
+          lapply(item$variantes, function(x) {
+            htmltools::tags$button(
+              type = "button", class = "opcion-variante",
+              `data-elige-input` = ns("agregar_variante"),
+              `data-elige-valor` = paste0(item$id, "|", x$id),
+              htmltools::tags$span(class = "opcion-variante__nombre", x$nombre),
+              htmltools::tags$span(class = "opcion-variante__precio",
+                                   formato_dinero(as.numeric(x$precio_venta)))
+            )
+          })
+        ),
+        enlace_accion(ns("cerrar_variante"), "Cerrar", "x-lg")
+      )
+    })
 
     output$grilla <- shiny::renderUI({
       v <- vocab()
@@ -186,11 +231,12 @@ mod_vender_server <- function(id, s, ir_a) {
           htmltools::tags$ul(
             class = "lista-opciones",
             lapply(g$items, function(i) {
-              n <- en_carrito[[i$id]]
+              n <- en_carrito_de(i$id)
               item_lista(
                 "tag", i$nombre,
                 htmltools::tagList(
                   if (!is.null(n)) htmltools::tags$span(class = "cantidad-insignia", paste0("×", n)),
+                  if (isTRUE(i$tiene_variantes)) "desde ",
                   formato_dinero(as.numeric(i$precio_venta))
                 ),
                 `data-elige-input` = ns("agregar_item"), `data-elige-valor` = i$id
@@ -431,13 +477,33 @@ mod_vender_server <- function(id, s, ir_a) {
     shiny::observeEvent(input$agregar, ir_a("productos"))
     shiny::observeEvent(input$reintentar, refresco(refresco() + 1L))
 
+    sumar <- function(clave) {
+      actual <- carrito()
+      actual[[clave]] <- min((actual[[clave]] %||% 0L) + 1L, 999L)
+      carrito(actual)
+    }
+
     shiny::observeEvent(input$agregar_item, {
       id <- input$agregar_item
-      if (is.null(items_por_id()[[id]])) return()
-      actual <- carrito()
-      actual[[id]] <- min((actual[[id]] %||% 0L) + 1L, 999L)
-      carrito(actual)
+      item <- items_por_id()[[id]]
+      if (is.null(item)) return()
+      if (isTRUE(item$tiene_variantes)) {
+        eligiendo(id)  # primero la talla o el color
+        session$sendCustomMessage("subir", TRUE)
+        return()
+      }
+      sumar(id)
     })
+
+    shiny::observeEvent(input$agregar_variante, {
+      partes <- strsplit(input$agregar_variante, "|", fixed = TRUE)[[1]]
+      item <- items_por_id()[[partes[1]]]
+      if (length(partes) != 2 || is.null(item)) return()
+      if (!partes[2] %in% vapply(item$variantes, function(x) x$id, "")) return()
+      sumar(input$agregar_variante)
+      eligiendo(NULL)
+    })
+    shiny::observeEvent(input$cerrar_variante, eligiendo(NULL))
 
     shiny::observeEvent(input$ajustar, {
       partes <- strsplit(input$ajustar, ":", fixed = TRUE)[[1]]
@@ -468,7 +534,10 @@ mod_vender_server <- function(id, s, ir_a) {
       lineas <- lineas_carrito()
       if (length(lineas) == 0) return()
       cuerpo <- list(
-        lineas = lapply(lineas, function(l) list(item_id = l$id, cantidad = l$cantidad)),
+        lineas = lapply(lineas, function(l) {
+          c(list(item_id = l$item_id, cantidad = l$cantidad),
+            if (!is.null(l$variante_id)) list(item_variante_id = l$variante_id))
+        }),
         medio_pago = medio()
       )
       r <- sesion_llamar(

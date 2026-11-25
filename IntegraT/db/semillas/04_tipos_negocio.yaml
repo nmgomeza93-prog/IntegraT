@@ -108,3 +108,49 @@
           - {nombre: Desechables,              es_fijo: false, rol_cuenta: GASTO_VARIOS}
           - {nombre: Teléfono e internet,      es_fijo: true,  rol_cuenta: GASTO_COMUNICACIONES}
           - {nombre: Mantenimiento,            es_fijo: false, rol_cuenta: GASTO_MANTENIMIENTO}
+
+# Variantes (docs/PLAN_VARIANTES.md): atributos que recibe cada negocio nuevo y categorías sugeridas
+# con sus atributos y palabras clave (las usa la importación de facturas para sugerir la categoría).
+# El negocio puede agregar valores, atributos y categorías; esto es solo el punto de partida.
+- tabla: core_cfg_tipo_negocio_plantilla
+  filas:
+    - tipo_negocio_codigo: ventas_en_linea
+      tipo_plantilla: variantes
+      version_plantilla: 1
+      contenido:
+        atributos:
+          - {nombre: Talla,  valores: [XS, S, M, L, XL, XXL, Única]}
+          - {nombre: Color,  valores: [Negro, Blanco, Gris, Beige, Café, Rosa, Rojo, Morado, Azul, Verde, Amarillo, Naranja, Multicolor]}
+          - {nombre: Número, valores: ["34", "35", "36", "37", "38", "39", "40", "41", "42"]}
+        categorias_sugeridas:
+          - nombre: Ropa de dormir
+            icono: moon-stars
+            atributos: [Talla, Color]
+            palabras_clave: [pijama, lenceria, lencería, camisola, bata, "ropa de estar en casa", "ropa de dormir", "conjunto de pijama"]
+          - nombre: Ropa
+            icono: bag
+            atributos: [Talla, Color]
+            palabras_clave: [camisa, camiseta, blusa, vestido, pantalon, pantalón, short, falda, sueter, suéter, chaqueta, abrigo, top, conjunto, leggings, jeans, sudadera]
+          - nombre: Calzado
+            icono: bootstrap
+            atributos: [Número, Color]
+            palabras_clave: [zapato, zapatos, tenis, sandalia, sandalias, bota, botas, pantufla, chancla]
+          - nombre: Electrónica
+            icono: cpu
+            atributos: [Color]
+            palabras_clave: [camara, cámara, cargador, audifonos, audífonos, cable, bocina, "reloj inteligente", smartwatch, tablero, salpicadero, usb, bluetooth, led]
+          - nombre: Accesorios
+            icono: gem
+            atributos: [Color]
+            palabras_clave: [bolsa, cartera, collar, arete, aretes, pulsera, anillo, lentes, gorra, cinturon, cinturón, bufanda, reloj]
+          - nombre: Hogar
+            icono: house
+            atributos: [Color]
+            palabras_clave: [cojin, cojín, lampara, lámpara, cortina, sabana, sábana, toalla, organizador, decoracion, decoración]
+    - tipo_negocio_codigo: restaurante
+      tipo_plantilla: variantes
+      version_plantilla: 1
+      contenido:
+        atributos:
+          - {nombre: Tamaño, valores: [Pequeño, Mediano, Grande]}
+        categorias_sugeridas: []

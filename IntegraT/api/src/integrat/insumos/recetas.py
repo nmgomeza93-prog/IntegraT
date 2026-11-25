@@ -68,7 +68,8 @@ def _precio(con: Connection, ctx: ais.ContextoNegocio, item_id: uuid.UUID) -> De
 
 
 def _lineas(con: Connection, ctx: ais.ContextoNegocio, item_id: uuid.UUID):
-    """Líneas vivas con su insumo (aunque esté archivado) y la unidad de la línea."""
+    """Líneas vivas COMUNES (de todas las variantes) con su insumo (aunque esté archivado) y la
+    unidad de la línea. Las líneas de una variante (su mercadería) se manejan solas."""
     return con.execute(
         ais.seleccionar(
             ctx, ops_receta_linea,
@@ -86,7 +87,8 @@ def _lineas(con: Connection, ctx: ais.ContextoNegocio, item_id: uuid.UUID):
                                       ops_insumo.c.negocio_id == ctx.negocio_id))
             .join(cat_unidad_medida,
                   cat_unidad_medida.c.codigo == ops_receta_linea.c.unidad_codigo))
-        .where(ops_receta_linea.c.item_id == item_id)
+        .where(ops_receta_linea.c.item_id == item_id,
+               ops_receta_linea.c.item_variante_id.is_(None))
         .order_by(ops_receta_linea.c.creado_en, ops_receta_linea.c.id)
     ).all()
 
@@ -167,7 +169,8 @@ def reemplazar_receta(con: Connection, ctx: ais.ContextoNegocio, item_id: uuid.U
                        "cantidad": linea.cantidad, "unidad_codigo": usada.codigo})
 
     con.execute(
-        ais.actualizar(ctx, ops_receta_linea, ops_receta_linea.c.item_id == item_id)
+        ais.actualizar(ctx, ops_receta_linea, ops_receta_linea.c.item_id == item_id,
+                       ops_receta_linea.c.item_variante_id.is_(None))
         .values(eliminado_en=ahora_utc(), eliminado_por=ctx.usuario_id)
     )
     for valores in nuevas:
@@ -188,26 +191,30 @@ def contar_items_con_receta(con: Connection, ctx: ais.ContextoNegocio) -> int:
 # ------------------------------------------------------------------ al vender y al anular
 
 def consumir_por_venta(con: Connection, ctx: ais.ContextoNegocio, venta_id: uuid.UUID,
-                       cantidades: dict[uuid.UUID, int]) -> list[str]:
+                       cantidades: dict[tuple[uuid.UUID, uuid.UUID], int]) -> list[str]:
     """Descuenta los insumos de lo vendido. Devuelve los que quedaron sin existencia.
 
-    Una venta de ítems sin receta no toca el inventario. Nunca bloquea la venta: si falta insumo,
-    la existencia queda negativa y se avisa.
+    `cantidades`: (ítem, variante vendida) -> unidades. Cada variante consume las líneas comunes
+    de la receta más las suyas (su mercadería). Una venta de ítems sin receta no toca el
+    inventario. Nunca bloquea la venta: si falta insumo, la existencia queda negativa y se avisa.
     """
     if not cantidades:
         return []
     filas = con.execute(
         ais.seleccionar(
             ctx, ops_receta_linea, ops_receta_linea.c.item_id, ops_receta_linea.c.insumo_id,
+            ops_receta_linea.c.item_variante_id,
             ops_receta_linea.c.cantidad, cat_unidad_medida.c.factor_a_base.label("factor"),
         )
         .select_from(ops_receta_linea.join(
             cat_unidad_medida, cat_unidad_medida.c.codigo == ops_receta_linea.c.unidad_codigo))
-        .where(ops_receta_linea.c.item_id.in_(list(cantidades)))
+        .where(ops_receta_linea.c.item_id.in_(list({i for i, _ in cantidades})))
     ).all()
     por_insumo: dict[uuid.UUID, Decimal] = defaultdict(lambda: CERO)
-    for f in filas:
-        por_insumo[f.insumo_id] += f.cantidad * f.factor * cantidades[f.item_id]
+    for (item_id, variante_id), unidades in cantidades.items():
+        for f in filas:
+            if f.item_id == item_id and f.item_variante_id in (None, variante_id):
+                por_insumo[f.insumo_id] += f.cantidad * f.factor * unidades
 
     sin_existencia: list[str] = []
     for insumo_id in sorted(por_insumo):  # siempre en el mismo orden: sin bloqueos cruzados

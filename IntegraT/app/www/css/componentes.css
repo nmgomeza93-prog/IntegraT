@@ -422,3 +422,46 @@
 .marca-precio--bajo { color: var(--color-atencion); background: var(--color-atencion-fondo); }
 .precio-sugerido .boton-primario { width: 100%; margin-top: var(--esp-3); }
 .precio-sugerido .enlace-accion { margin-top: var(--esp-2); }
+
+/* Variantes: chips para elegir talla/color, líneas de la ficha y selector al vender */
+.chips { display: flex; flex-wrap: wrap; gap: var(--esp-2); margin-bottom: var(--esp-2); }
+.chip {
+  min-height: var(--toque-minimo);
+  min-width: var(--toque-minimo);
+  padding: 0 var(--esp-3);
+  border: 1px solid var(--color-borde);
+  border-radius: 999px;
+  background: var(--color-superficie);
+  color: var(--color-texto);
+  font: inherit;
+  cursor: pointer;
+}
+.chip[aria-pressed="true"] { background: var(--color-marca); border-color: var(--color-marca); color: #fff; }
+.linea-variante {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-2);
+  min-height: var(--toque-minimo);
+  padding: var(--esp-2) var(--esp-4);
+  background: var(--color-superficie);
+  border-bottom: 1px solid var(--color-borde);
+}
+.linea-variante__texto { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.linea-variante__detalle { color: var(--color-texto-2); font-size: var(--texto-pequeno); }
+.elegir-variante__opciones { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--esp-2); margin: var(--esp-3) 0; }
+.opcion-variante {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: var(--toque-minimo);
+  padding: var(--esp-2) var(--esp-3);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio-control);
+  background: var(--color-superficie);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.opcion-variante__nombre { font-weight: 600; }
+.opcion-variante__precio { color: var(--color-texto-2); font-size: var(--texto-pequeno); }

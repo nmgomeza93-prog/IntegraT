@@ -21,6 +21,7 @@ from integrat.logs import configurar_logs
 from integrat.middleware import LimiteCuerpo
 from integrat.negocios.router import router as router_negocios
 from integrat.salud.router import router as router_salud
+from integrat.variantes.router import router as router_variantes
 from integrat.ventas.router import router as router_ventas
 
 PREFIJO = "/v1"
@@ -51,7 +52,8 @@ def crear_app() -> FastAPI:
             allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
             allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
         )
-    for router in (router_salud, router_auth, router_catalogos, router_negocios, router_items,
+    for router in (router_salud, router_auth, router_catalogos, router_negocios, router_variantes,
+                   router_items,
                    router_ventas, router_gastos, router_insumos, router_compras,
                    router_contabilidad, router_caja):
         app.include_router(router, prefix=PREFIJO)

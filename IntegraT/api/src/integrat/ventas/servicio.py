@@ -51,6 +51,10 @@ class ItemNoVendible(Exception):
     """Un ítem no existe en este negocio, está archivado o no está a la venta."""
 
 
+class FaltaVariante(Exception):
+    """El producto tiene variantes (talla, color…) y la línea no dice cuál."""
+
+
 class YaAnulada(Exception):
     pass
 
@@ -65,16 +69,19 @@ def _utc(valor: datetime | None) -> datetime | None:
 
 # ------------------------------------------------------------------ crear
 
-def _cantidades_por_item(datos: VentaIn) -> dict[uuid.UUID, int]:
-    """El mismo ítem repetido se suma."""
-    cantidades: dict[uuid.UUID, int] = defaultdict(int)
+Clave = tuple[uuid.UUID, uuid.UUID | None]  # (ítem, variante pedida)
+
+
+def _cantidades_por_item(datos: VentaIn) -> dict[Clave, int]:
+    """El mismo ítem (y la misma variante) repetido se suma."""
+    cantidades: dict[Clave, int] = defaultdict(int)
     for linea in datos.lineas:
-        cantidades[linea.item_id] += linea.cantidad
+        cantidades[(linea.item_id, linea.item_variante_id)] += linea.cantidad
     return dict(cantidades)
 
 
-def _cargar_items(con: Connection, ctx: ais.ContextoNegocio, ids: list[uuid.UUID]):
-    """Ítems vendibles del negocio con su precio vigente (la variante implícita)."""
+def _cargar_variantes(con: Connection, ctx: ais.ContextoNegocio, ids: list[uuid.UUID]):
+    """Variantes vivas de los ítems vendibles del negocio, con su precio vigente."""
     variante = sa.and_(
         ops_item_variante.c.item_id == ops_item.c.id,
         ops_item_variante.c.negocio_id == ctx.negocio_id,
@@ -84,11 +91,31 @@ def _cargar_items(con: Connection, ctx: ais.ContextoNegocio, ids: list[uuid.UUID
         ais.seleccionar(
             ctx, ops_item, ops_item.c.id, ops_item.c.nombre,
             ops_item_variante.c.id.label("variante_id"), ops_item_variante.c.precio_venta,
+            ops_item_variante.c.nombre.label("variante_nombre"),
+            ops_item_variante.c.atributos,
         )
         .select_from(ops_item.join(ops_item_variante, variante))
         .where(ops_item.c.id.in_(ids), ops_item.c.se_vende.is_(True))
     ).all()
-    return {f.id: f for f in filas}
+    por_item: dict[uuid.UUID, list] = defaultdict(list)
+    for f in filas:
+        por_item[f.id].append(f)
+    return por_item
+
+
+def _resolver(por_item: dict, item_id: uuid.UUID, variante_id: uuid.UUID | None):
+    """La variante que se vende: la pedida o, si el ítem no tiene variantes, su implícita."""
+    opciones = por_item.get(item_id)
+    if not opciones:
+        raise ItemNoVendible
+    if variante_id is not None:
+        elegida = next((f for f in opciones if f.variante_id == variante_id), None)
+        if elegida is None:
+            raise ItemNoVendible
+        return elegida
+    if any(f.atributos is not None for f in opciones):
+        raise FaltaVariante
+    return opciones[0]
 
 
 def _siguiente_numero(con: Connection, ctx: ais.ContextoNegocio) -> int:
@@ -109,20 +136,23 @@ def _siguiente_numero(con: Connection, ctx: ais.ContextoNegocio) -> int:
 
 
 def crear_venta(con: Connection, ctx: ais.ContextoNegocio, datos: VentaIn) -> VentaOut:
-    cantidades = _cantidades_por_item(datos)
-    items = _cargar_items(con, ctx, list(cantidades))
-    if len(items) != len(cantidades):
-        raise ItemNoVendible
+    pedidas = _cantidades_por_item(datos)
+    por_item = _cargar_variantes(con, ctx, list({i for i, _ in pedidas}))
 
     lineas = []
-    for item_id, cantidad in cantidades.items():
-        item = items[item_id]
-        precio = Decimal(item.precio_venta).quantize(CENTAVO)
+    vendidas: dict[tuple[uuid.UUID, uuid.UUID], int] = defaultdict(int)  # (ítem, variante real)
+    for (item_id, variante_id), cantidad in pedidas.items():
+        fila = _resolver(por_item, item_id, variante_id)
+        precio = Decimal(fila.precio_venta).quantize(CENTAVO)
+        nombre = fila.nombre
+        if fila.atributos is not None:  # "Pijama Luxe · M · Rosa"
+            nombre = f"{fila.nombre} · {fila.variante_nombre}"
         lineas.append({
-            "item_id": item_id, "item_variante_id": item.variante_id, "nombre": item.nombre,
+            "item_id": item_id, "item_variante_id": fila.variante_id, "nombre": nombre[:120],
             "cantidad": cantidad, "precio_unitario": precio,
             "total": (precio * cantidad).quantize(CENTAVO),
         })
+        vendidas[(item_id, fila.variante_id)] += cantidad
     total = sum((linea["total"] for linea in lineas), Decimal("0.00"))
     moneda = con.execute(
         sa.select(core_negocio.c.moneda_codigo).where(core_negocio.c.id == ctx.negocio_id)
@@ -140,7 +170,7 @@ def crear_venta(con: Connection, ctx: ais.ContextoNegocio, datos: VentaIn) -> Ve
     con.execute(ais.insertar(ctx, ops_pago, {
         "id": uuid7(), "venta_id": venta_id, "medio_pago": datos.medio_pago, "monto": total,
     }))
-    faltantes = recetas.consumir_por_venta(con, ctx, venta_id, cantidades)
+    faltantes = recetas.consumir_por_venta(con, ctx, venta_id, dict(vendidas))
     contabilidad.asentar_venta(con, ctx, venta_id)  # al final: el libro se bloquea de último
     return obtener_venta(con, ctx, venta_id).model_copy(update={"insumos_en_falta": faltantes})
 
@@ -148,7 +178,7 @@ def crear_venta(con: Connection, ctx: ais.ContextoNegocio, datos: VentaIn) -> Ve
 def _huella(datos: VentaIn) -> str:
     cuerpo = {
         "medio_pago": datos.medio_pago,
-        "lineas": sorted((str(i), c) for i, c in _cantidades_por_item(datos).items()),
+        "lineas": sorted((str(i), str(v), c) for (i, v), c in _cantidades_por_item(datos).items()),
     }
     return hashlib.sha256(json.dumps(cuerpo, sort_keys=True).encode()).hexdigest()
 
@@ -205,7 +235,8 @@ def _armar(con: Connection, ctx: ais.ContextoNegocio, filas_venta) -> list[Venta
         .order_by(ops_venta_linea.c.creado_en, ops_venta_linea.c.id)
     ):
         lineas[fila.venta_id].append(LineaOut(
-            item_id=fila.item_id, nombre=fila.nombre, cantidad=int(fila.cantidad),
+            item_id=fila.item_id, item_variante_id=fila.item_variante_id, nombre=fila.nombre,
+            cantidad=int(fila.cantidad),
             precio_unitario=fila.precio_unitario, total=fila.total,
         ))
     medios = {

@@ -78,6 +78,22 @@ tarjeta_precio_sugerido <- function(r, usar_id, margen_id) {
   )
 }
 
+# Qué atributos ofrecer al agregar una variante: los de su categoría; si no tiene, los que ya usan
+# sus variantes; si tampoco, todos los del negocio (los que se dejen en blanco no se usan).
+atributos_para_item <- function(item, categorias, atributos) {
+  nombres <- character()
+  if (!is.null(item$categoria_id)) {
+    cat <- Filter(function(c) identical(c$id, item$categoria_id), categorias)
+    if (length(cat) > 0) nombres <- unlist(cat[[1]]$atributos)
+  }
+  if (length(nombres) == 0) {
+    nombres <- unique(unlist(lapply(item$variantes %||% list(), function(v) names(v$atributos))))
+  }
+  if (length(nombres) == 0) return(atributos)
+  elegidos <- Filter(function(a) a$nombre %in% nombres, atributos)
+  elegidos[order(match(vapply(elegidos, function(a) a$nombre, ""), nombres))]
+}
+
 mod_productos_ui <- function(id, vocab) {
   ns <- shiny::NS(id)
   htmltools::tags$div(class = "catalogo", shiny::uiOutput(ns("contenido")))
@@ -102,6 +118,9 @@ mod_productos_server <- function(id, s, ir_a) {
     receta <- shiny::reactiveVal(NULL)
     datos_receta <- shiny::reactiveVal(NULL)   # list(insumos, unidades) para armar la receta
     margen_abierto <- shiny::reactiveVal(FALSE)  # el formulario del margen propio
+    atributos_neg <- shiny::reactiveVal(NULL)      # GET /v1/atributos (tallas, colores…)
+    elegidos <- shiny::reactiveVal(list())         # atributo -> valor elegido para la variante nueva
+    editando_var <- shiny::reactiveVal(NULL)       # la variante a la que se le cambia el precio
     error_margen <- shiny::reactiveVal(NULL)
 
     vocab <- shiny::reactive(vocab_negocio(shiny::req(s$negocio)))
@@ -210,8 +229,12 @@ mod_productos_server <- function(id, s, ir_a) {
             class = "lista-opciones",
             lapply(g$items, function(i) {
               item_lista("tag", i$nombre,
-                         htmltools::tagList(marca_precio(i$aviso_precio),
-                                            formato_dinero(as.numeric(i$precio_venta))),
+                         htmltools::tagList(
+                           marca_precio(i$aviso_precio),
+                           if (isTRUE(i$tiene_variantes)) {
+                             paste0(length(i$variantes), " variantes · desde ")
+                           },
+                           formato_dinero(as.numeric(i$precio_venta))),
                          `data-elige-input` = ns("abrir"), `data-elige-valor` = i$id)
             })
           )
@@ -255,6 +278,12 @@ mod_productos_server <- function(id, s, ir_a) {
           if (!is.null(it)) ui_mercaderia(it),
           if (!is.null(it) && !isTRUE(mercaderia()$activa)) {
             boton_secundario(ns("ver_receta"), "Receta y costo", "basket")
+          },
+          if (!is.null(it)) {
+            boton_secundario(ns("ver_variantes"),
+                             if (isTRUE(it$tiene_variantes)) {
+                               paste0("Tallas y colores (", length(it$variantes), ")")
+                             } else "Tallas y colores", "grid-3x3-gap")
           },
           if (!is.null(it)) ui_archivar(v, it)
         )
@@ -469,7 +498,8 @@ mod_productos_server <- function(id, s, ir_a) {
     }
 
     output$contenido <- shiny::renderUI({
-      switch(vista(), lista = ui_lista(), receta = ui_receta(), ui_formulario())
+      switch(vista(), lista = ui_lista(), receta = ui_receta(), variantes = ui_variantes(),
+             ui_formulario())
     })
     output$error <- shiny::renderUI(mensaje_error(error()))
 
@@ -589,6 +619,192 @@ mod_productos_server <- function(id, s, ir_a) {
     }
     shiny::observeEvent(input$poner_mercaderia, cambiar_mercaderia(TRUE))
     shiny::observeEvent(input$quitar_mercaderia, cambiar_mercaderia(FALSE))
+
+    # --- Variantes: tallas, colores… (docs/PLAN_VARIANTES.md) --------------------------------
+    ui_variantes <- function() {
+      it <- editando()
+      atributos <- atributos_neg()
+      atras <- enlace_atras(ns("atras_variantes"), it$nombre)
+      titulo <- htmltools::tags$h1(class = "pantalla__titulo", "Tallas y colores")
+      if (is.null(atributos)) {
+        return(htmltools::tagList(atras, titulo, shiny::uiOutput(ns("error"))))
+      }
+      ofrecer <- atributos_para_item(it, lista_categorias(), atributos)
+      sel <- shiny::isolate(elegidos())  # el chip se marca en el navegador, sin redibujar
+      ev <- editando_var()
+      htmltools::tagList(
+        atras, titulo,
+        htmltools::tags$div(
+          class = "pila",
+          if (length(it$variantes) == 0) {
+            htmltools::tags$p(class = "entrada__texto",
+                              "Si lo vendes en varias tallas o colores, agrégalas aquí: cada una ",
+                              "lleva su inventario y su precio.")
+          } else {
+            htmltools::tags$ul(
+              class = "lista-opciones lista-variantes",
+              lapply(it$variantes, function(x) {
+                htmltools::tags$li(
+                  class = "linea-variante",
+                  htmltools::tags$span(
+                    class = "linea-variante__texto",
+                    htmltools::tags$strong(x$nombre),
+                    htmltools::tags$span(
+                      class = "linea-variante__detalle",
+                      formato_dinero(as.numeric(x$precio_venta)),
+                      if (!is.null(x$precio_sugerido)) {
+                        paste0(" · sugerido ", formato_dinero(as.numeric(x$precio_sugerido)))
+                      },
+                      if (!is.null(x$codigo)) paste0(" · ", x$codigo)),
+                    marca_precio(x$aviso_precio)
+                  ),
+                  htmltools::tags$button(
+                    type = "button", class = "boton-cantidad",
+                    `aria-label` = paste("Cambiar", x$nombre),
+                    `data-elige-input` = ns("editar_variante"), `data-elige-valor` = x$id,
+                    icono("pencil")),
+                  htmltools::tags$button(
+                    type = "button", class = "boton-cantidad",
+                    `aria-label` = paste("Quitar", x$nombre),
+                    `data-elige-input` = ns("quitar_variante"), `data-elige-valor` = x$id,
+                    icono("x-lg"))
+                )
+              })
+            )
+          },
+          htmltools::tags$section(
+            class = "tarjeta",
+            htmltools::tags$h2(class = "hoja__titulo",
+                               if (is.null(ev)) "Agregar una variante" else paste("Cambiar", ev$nombre)),
+            if (is.null(ev)) {
+              lapply(seq_along(ofrecer), function(i) {
+                a <- ofrecer[[i]]
+                htmltools::tags$div(
+                  class = "campo",
+                  htmltools::tags$label(id = ns(paste0("atr-", i)), a$nombre),
+                  htmltools::tags$div(
+                    class = "chips", role = "group", `aria-labelledby` = ns(paste0("atr-", i)),
+                    `data-elige-grupo` = "",
+                    lapply(a$valores, function(v) {
+                      htmltools::tags$button(
+                        type = "button", class = "chip",
+                        `data-elige-input` = ns("elegir_valor"),
+                        `data-elige-valor` = paste0(a$nombre, "::", v$valor),
+                        `aria-pressed` = if (identical(sel[[a$nombre]], v$valor)) "true" else "false",
+                        v$valor)
+                    })
+                  ),
+                  campo_texto(ns(paste0("otro_", i)), NULL,
+                              placeholder = paste(a$nombre, "que no está"), autocompletar = "off")
+                )
+              })
+            },
+            campo_texto(ns("var_precio"), "Precio (Q)",
+                        valor = if (!is.null(ev)) ev$precio_venta else it$precio_venta,
+                        autocompletar = "off", modo = "decimal"),
+            campo_texto(ns("var_codigo"), "Código (opcional)", valor = ev$codigo %||% "",
+                        placeholder = "Ej. el SKC de SHEIN", autocompletar = "off"),
+            mensaje_error(error()),
+            boton_primario(ns("guardar_variante"),
+                           if (is.null(ev)) "Agregar" else "Guardar cambios", "check-lg"),
+            if (!is.null(ev)) enlace_accion(ns("cancelar_variante"), "Mejor no", "x-lg")
+          )
+        )
+      )
+    }
+
+    # Manda la lista completa de variantes y deja la ficha al día.
+    guardar_variantes <- function(lista, aviso) {
+      it <- editando()
+      r <- sesion_llamar(s, "PUT", paste0("v1/items/", it$id, "/variantes"), list(variantes = lista))
+      if (!r$ok) {
+        error(r$mensaje)
+        return(FALSE)
+      }
+      error(NULL)
+      editando(r$cuerpo)
+      elegidos(list())
+      editando_var(NULL)
+      refresco(refresco() + 1L)
+      s$catalogo_v <- shiny::isolate(s$catalogo_v) + 1L  # Vender ve las tallas nuevas
+      cargar_atributos()  # puede haber valores nuevos
+      shiny::showNotification(aviso, duration = 4, closeButton = FALSE, id = "catalogo-aviso")
+      TRUE
+    }
+
+    actuales_para_guardar <- function(cambiar = NULL) {
+      lapply(editando()$variantes, function(x) {
+        base <- list(id = x$id, atributos = x$atributos, precio_venta = x$precio_venta,
+                     codigo = x$codigo)
+        if (identical(x$id, cambiar$id)) utils::modifyList(base, cambiar) else base
+      })
+    }
+
+    cargar_atributos <- function() {
+      r <- sesion_llamar(s, "GET", "v1/atributos")
+      if (!r$ok) return(error(r$mensaje))
+      atributos_neg(r$cuerpo)
+    }
+
+    shiny::observeEvent(input$ver_variantes, {
+      if (is.null(editando())) return()
+      error(NULL)
+      elegidos(list())
+      editando_var(NULL)
+      cargar_atributos()
+      ir_a_vista("variantes")
+    })
+    shiny::observeEvent(input$atras_variantes, {
+      error(NULL)
+      ir_a_vista("editar")
+    })
+    shiny::observeEvent(input$elegir_valor, {
+      partes <- strsplit(input$elegir_valor, "::", fixed = TRUE)[[1]]
+      if (length(partes) != 2) return()
+      actual <- elegidos()
+      actual[[partes[1]]] <- partes[2]
+      elegidos(actual)
+    })
+    shiny::observeEvent(input$editar_variante, {
+      x <- Filter(function(v) identical(v$id, input$editar_variante), editando()$variantes)
+      if (length(x) == 0) return()
+      error(NULL)
+      editando_var(x[[1]])
+    })
+    shiny::observeEvent(input$cancelar_variante, {
+      error(NULL)
+      editando_var(NULL)
+    })
+    shiny::observeEvent(input$quitar_variante, {
+      if (vista() != "variantes") return()
+      quedan <- Filter(function(x) !identical(x$id, input$quitar_variante), actuales_para_guardar())
+      guardar_variantes(quedan, "Quitaste esa variante.")
+    })
+    shiny::observeEvent(input$guardar_variante, {
+      if (vista() != "variantes") return()
+      precio <- normalizar_precio(input$var_precio)
+      if (is.null(precio)) return(error("Escribe el precio con números, por ejemplo 115 o 115.50."))
+      codigo <- trimws(input$var_codigo %||% "")
+      codigo <- if (nzchar(codigo)) codigo else NULL
+      ev <- editando_var()
+      if (!is.null(ev)) {
+        guardar_variantes(actuales_para_guardar(list(id = ev$id, precio_venta = precio,
+                                                     codigo = codigo)),
+                          paste("Guardaste", ev$nombre))
+        return()
+      }
+      ofrecer <- atributos_para_item(editando(), lista_categorias(), atributos_neg())
+      atributos <- elegidos()
+      for (i in seq_along(ofrecer)) {
+        otro <- trimws(input[[paste0("otro_", i)]] %||% "")
+        if (nzchar(otro)) atributos[[ofrecer[[i]]$nombre]] <- otro
+      }
+      if (length(atributos) == 0) return(error("Elige al menos una talla, color u otra opción."))
+      nueva <- c(list(atributos = atributos, precio_venta = precio),
+                 if (!is.null(codigo)) list(codigo = codigo))
+      guardar_variantes(c(actuales_para_guardar(), list(nueva)),
+                        paste("Agregaste", paste(unlist(atributos), collapse = " · ")))
+    })
 
     shiny::observeEvent(input$ver_receta, {
       if (is.null(editando())) return()

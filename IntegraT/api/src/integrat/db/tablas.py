@@ -343,6 +343,8 @@ ops_categoria = sa.Table(
     sa.Column("orden", sa.SmallInteger(), nullable=False, server_default=sa.text("0")),
     sa.Column("icono", sa.String(40), nullable=True),
     *cols_auditoria(),
+    sa.Column("palabras_clave", sa.JSON(), nullable=True,
+              comment="Para sugerir la categoría de un producto importado"),
     sa.Index(None, "negocio_id"),
     comment="Categorías del catálogo de cada negocio",
     **OPCIONES_TABLA,
@@ -379,6 +381,9 @@ ops_item_variante = sa.Table(
     sa.Column("nombre", sa.String(80), nullable=False, server_default="Única"),
     sa.Column("precio_venta", sa.Numeric(14, 2), nullable=False),
     *cols_auditoria(),
+    sa.Column("codigo", sa.String(60), nullable=True, comment="Código del proveedor (SKC) o SKU"),
+    sa.Column("atributos", sa.JSON(), nullable=True,
+              comment="Ej. {Talla: M, Color: Rosa}; nulo = Única"),
     sa.CheckConstraint("precio_venta >= 0", name="precio_venta"),
     sa.Index(None, "negocio_id"),
     sa.Index(None, "item_id"),
@@ -446,6 +451,47 @@ ops_pago = sa.Table(
     **OPCIONES_TABLA,
 )
 
+ops_atributo = sa.Table(
+    "ops_atributo", metadata,
+    col_id(),
+    _fk("negocio_id", UUIDBinario(), "core_negocio.id"),
+    sa.Column("nombre", sa.String(40), nullable=False),
+    sa.Column("orden", sa.SmallInteger(), nullable=False, server_default=sa.text("0")),
+    *cols_auditoria(),
+    sa.Index(None, "negocio_id"),
+    comment="Atributos de variante del negocio (talla, color…)",
+    **OPCIONES_TABLA,
+)
+
+ops_atributo_valor = sa.Table(
+    "ops_atributo_valor", metadata,
+    col_id(),
+    _fk("negocio_id", UUIDBinario(), "core_negocio.id"),
+    _fk("atributo_id", UUIDBinario(), "ops_atributo.id"),
+    sa.Column("valor", sa.String(40), nullable=False),
+    sa.Column("orden", sa.SmallInteger(), nullable=False, server_default=sa.text("0")),
+    *cols_auditoria(),
+    sa.Index(None, "negocio_id"),
+    sa.Index(None, "atributo_id"),
+    comment="Valores de un atributo (S, M, L; Negro, Rosa…)",
+    **OPCIONES_TABLA,
+)
+
+ops_categoria_atributo = sa.Table(
+    "ops_categoria_atributo", metadata,
+    col_id(),
+    _fk("negocio_id", UUIDBinario(), "core_negocio.id"),
+    _fk("categoria_id", UUIDBinario(), "ops_categoria.id"),
+    _fk("atributo_id", UUIDBinario(), "ops_atributo.id"),
+    sa.Column("orden", sa.SmallInteger(), nullable=False, server_default=sa.text("0")),
+    *cols_auditoria(),
+    sa.Index(None, "negocio_id"),
+    sa.Index(None, "categoria_id"),
+    sa.Index(None, "atributo_id"),
+    comment="Qué atributos usan los productos de cada categoría",
+    **OPCIONES_TABLA,
+)
+
 ops_categoria_gasto = sa.Table(
     "ops_categoria_gasto", metadata,
     col_id(),
@@ -504,6 +550,9 @@ ops_insumo = sa.Table(
     sa.Index(None, "negocio_id"),
     sa.Index(None, "unidad_codigo"),
     sa.Index(None, "item_id"),
+    sa.Column("item_variante_id", UUIDBinario(), sa.ForeignKey("ops_item_variante.id"),
+              nullable=True, comment="Variante de la que este insumo es la mercadería"),
+    sa.Index(None, "item_variante_id"),
     comment="Insumos que el negocio compra y consume",
     **OPCIONES_TABLA,
 )
@@ -548,6 +597,9 @@ ops_receta_linea = sa.Table(
     sa.Index(None, "item_id"),
     sa.Index(None, "insumo_id"),
     sa.Index(None, "unidad_codigo"),
+    sa.Column("item_variante_id", UUIDBinario(), sa.ForeignKey("ops_item_variante.id"),
+              nullable=True, comment="Nulo = la línea es de todas las variantes"),
+    sa.Index(None, "item_variante_id"),
     comment="Líneas de receta: insumos que consume cada ítem vendido",
     **OPCIONES_TABLA,
 )
