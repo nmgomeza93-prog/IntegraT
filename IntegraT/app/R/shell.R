@@ -25,6 +25,7 @@ shell_ui <- function(negocio) {
         bslib::nav_panel_hidden("impuestos", mod_impuestos_ui("impuestos")),
         bslib::nav_panel_hidden("caja", mod_caja_ui("caja")),
         bslib::nav_panel_hidden("margen", mod_margen_ui("margen")),
+        bslib::nav_panel_hidden("reglas_venta", mod_reglas_venta_ui("reglas_venta")),
         bslib::nav_panel_hidden("importaciones", mod_importaciones_ui("importaciones")),
         bslib::nav_panel_hidden("dueno", mod_dueno_ui("dueno")),
         bslib::nav_panel_hidden("mas", mod_mas_ui("mas"))

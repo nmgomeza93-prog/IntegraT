@@ -103,6 +103,7 @@ server <- function(input, output, session) {
   mod_caja_server("caja", s, ir_a, seccion = reactive(input$seccion))
   mod_dueno_server("dueno", s, ir_a)
   mod_margen_server("margen", s, ir_a)
+  mod_reglas_venta_server("reglas_venta", s, ir_a)
   mod_importaciones_server("importaciones", s, ir_a)
   mod_mas_server("mas", salir, ir_a)
 }

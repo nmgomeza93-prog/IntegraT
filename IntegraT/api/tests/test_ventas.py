@@ -63,6 +63,8 @@ def test_los_numeros_de_venta_son_consecutivos_por_negocio(restaurante, tienda):
     cliente, _, h = restaurante
     a = item(cliente, h)
     assert [vender(cliente, h, [(a["id"], 1)]).json()["numero"] for _ in range(3)] == [1, 2, 3]
+    tienda[0].put(f"/v1/negocios/{tienda[1]['id']}/ventas", headers=tienda[2],
+                  json={"vender_sin_existencia": "avisar"})  # sin cargar inventario
     producto = item(tienda[0], tienda[2], "Camisa", "99")
     assert vender(tienda[0], tienda[2], [(producto["id"], 1)]).json()["numero"] == 1
 

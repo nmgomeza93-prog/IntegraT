@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.engine import Engine
 
+from integrat import existencias
 from integrat.auth.dependencias import AccesoNegocio, acceso_negocio
 from integrat.dependencias import obtener_engine
 from integrat.ventas import servicio
@@ -46,6 +47,8 @@ def cobrar(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "Alguno de los productos ya no está disponible. Revisa tu carrito.",
         ) from None
+    except existencias.SinExistencia as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, e.mensaje()) from None
     except servicio.FaltaVariante:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             "Elige la talla o el color de cada producto.") from None

@@ -95,11 +95,13 @@ iniciar_api_falsa <- function(env = parent.frame()) {
     negocio <- function(id, nombre, tipo, factura) {
       list(id = id, nombre = nombre, tipo_negocio_codigo = tipo, pais_codigo = "GT",
            moneda_codigo = "GTQ", zona_horaria = "America/Guatemala", da_factura = factura,
-           regimen_iva = estado$regimen, margen_objetivo = estado$margen, capacidades = list("recetas", "mesas"),
+           regimen_iva = estado$regimen, margen_objetivo = estado$margen,
+           vender_sin_existencia = estado$regla_venta, capacidades = list("recetas", "mesas"),
            vocabulario = vocab[[tipo]], primeros_pasos = pasos_al_dia(tipo))
     }
     estado$regimen <- "no_se"
     estado$margen <- "0.3500"
+    estado$regla_venta <- "avisar"   # Mari es un restaurante: avisa y deja vender
     estado$atributos <- list(
       list(id = "at-1", nombre = "Talla",
            valores = lapply(c("S", "M", "L"), function(v) list(id = paste0("va-", v), valor = v))),
@@ -315,6 +317,9 @@ iniciar_api_falsa <- function(env = parent.frame()) {
       it$margen_objetivo <- sprintf("%.4f", margen)
       it$margen_propio <- !is.null(it$margen_propio_valor)
       it$margen_propio_valor <- NULL
+      it$controla_inventario <- !is.null(it$stock)
+      it["disponible"] <- list(it$stock)
+      it$stock <- NULL
       costo <- costo_de(it)
       it["precio_sugerido"] <- list(NULL)
       it["aviso_precio"] <- list(NULL)
@@ -369,6 +374,7 @@ iniciar_api_falsa <- function(env = parent.frame()) {
                               proveedores = length(estado$proveedores),
                               regimen = estado$regimen,
                               margen = estado$margen,
+                              regla_venta = estado$regla_venta,
                               importaciones = length(estado$importaciones),
                               importaciones_recibidas = sum(vapply(estado$importaciones,
                                 function(i) i$estado %in% c("recibida", "recibida_parcial"), NA)),
@@ -470,6 +476,22 @@ iniciar_api_falsa <- function(env = parent.frame()) {
           return(json(503, list(detail = "El servicio no está listo. Intenta más tarde.")))
         }
         return(json(201, n))
+      }
+      # Atajo de las pruebas: fija la existencia de un ítem (no existe en la API real).
+      if (ruta == "/_stock" && metodo == "POST") {
+        d <- leer(req)
+        it <- estado$items[[d$item_id]]
+        it["stock"] <- list(if (is.null(d$n)) NULL else as.integer(d$n))
+        estado$items[[d$item_id]] <- it
+        return(json(200, list()))
+      }
+      if (grepl("^/v1/negocios/[^/]+/ventas$", ruta) && metodo == "PUT") {
+        d <- leer(req)
+        if (!(d$vender_sin_existencia %||% "") %in% c("bloquear", "avisar")) {
+          return(json(422, list(detail = "Revisa los datos e intenta de nuevo.")))
+        }
+        estado$regla_venta <- d$vender_sin_existencia
+        return(json(200, list()))
       }
       if (ruta == "/v1/categorias/sugeridas" && metodo == "GET") {
         return(json(200, list(list(nombre = "Ropa de dormir", icono = "moon-stars",
@@ -1083,6 +1105,27 @@ iniciar_api_falsa <- function(env = parent.frame()) {
         clave <- req$HTTP_IDEMPOTENCY_KEY %||% NULL
         if (!is.null(clave) && !is.null(estado$claves_venta[[clave]])) {
           return(json(201, estado$claves_venta[[clave]]))
+        }
+        if (identical(estado$regla_venta, "bloquear")) {
+          for (l in lineas) {
+            it <- estado$items[[l$item_id]]
+            if (is.null(it)) next
+            if (is.null(it$stock)) {
+              return(json(409, list(detail = paste0("No te alcanza para vender: ", it$nombre,
+                                                    " (aún no tiene inventario: cómpralo o impórtalo primero)."))))
+            }
+            if (l$cantidad > it$stock) {
+              return(json(409, list(detail = paste0("No te alcanza para vender: ", it$nombre,
+                                                    if (it$stock == 0) " (agotado)." else paste0(" (solo quedan ", it$stock, ").")))))
+            }
+          }
+          for (l in lineas) {
+            it <- estado$items[[l$item_id]]
+            if (!is.null(it$stock)) {
+              it$stock <- it$stock - l$cantidad
+              estado$items[[l$item_id]] <- it
+            }
+          }
         }
         armadas <- list()
         total <- 0

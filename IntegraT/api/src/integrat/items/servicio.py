@@ -12,7 +12,7 @@ from datetime import timedelta
 import sqlalchemy as sa
 from sqlalchemy.engine import Connection, Engine
 
-from integrat import precios
+from integrat import existencias, precios
 from integrat.db import aislamiento as ais
 from integrat.db.tablas import (
     core_cfg_tipo_negocio_plantilla,
@@ -21,6 +21,7 @@ from integrat.db.tablas import (
     ops_categoria,
     ops_item,
     ops_item_variante,
+    ops_receta_linea,
 )
 from integrat.db.tipos import ahora_utc, uuid7
 from integrat.insumos import mercaderia
@@ -251,7 +252,9 @@ def _consulta_items(ctx: ais.ContextoNegocio, incluir_eliminados: bool = False) 
 
 
 def _item_out(fila, aviso: str | None = None, precio: precios.InfoPrecio | None = None,
-              de_variantes: list | None = None, por_variante: dict | None = None) -> ItemOut:
+              de_variantes: list | None = None, por_variante: dict | None = None,
+              stock: tuple[dict, dict] | None = None) -> ItemOut:
+    stock_item, stock_var = stock or ({}, {})
     extra = {}
     if precio is not None:
         extra = {
@@ -266,8 +269,10 @@ def _item_out(fila, aviso: str | None = None, precio: precios.InfoPrecio | None 
         precio_venta=fila.precio_venta, se_vende=bool(fila.se_vende),
         archivado=fila.eliminado_en is not None, version=fila.version, aviso=aviso,
         tiene_variantes=bool(de_variantes),
-        variantes=[variantes.variante_out(v, (por_variante or {}).get(v.id))
-                   for v in de_variantes or []], **extra,
+        variantes=[variantes.variante_out(v, (por_variante or {}).get(v.id), stock_var.get(v.id))
+                   for v in de_variantes or []],
+        controla_inventario=stock_item.get(fila.id) is not None,
+        disponible=stock_item.get(fila.id), **extra,
     )
 
 
@@ -278,7 +283,8 @@ def obtener_item(con: Connection, ctx: ais.ContextoNegocio, item_id: uuid.UUID,
         raise NoEncontrado
     por_item, por_variante = precios.calcular(con, ctx, [item_id])
     return _item_out(fila, aviso, por_item.get(item_id),
-                     variantes.variantes_de(con, ctx, [item_id])[item_id], por_variante)
+                     variantes.variantes_de(con, ctx, [item_id])[item_id], por_variante,
+                     existencias.disponibles(con, ctx, [item_id]))
 
 
 def listar_items(con: Connection, ctx: ais.ContextoNegocio, *, categoria_id: uuid.UUID | None,
@@ -300,9 +306,28 @@ def listar_items(con: Connection, ctx: ais.ContextoNegocio, *, categoria_id: uui
     ids = [f.id for f in filas]
     info, por_variante = precios.calcular(con, ctx, ids)
     de_variantes = variantes.variantes_de(con, ctx, ids)
+    stock = existencias.disponibles(con, ctx, ids)
     return ListaItemsOut(total=total, items=[
         _item_out(f, precio=info.get(f.id), de_variantes=de_variantes[f.id],
-                  por_variante=por_variante) for f in filas])
+                  por_variante=por_variante, stock=stock) for f in filas])
+
+
+def asegurar_mercaderia(con: Connection, ctx: ais.ContextoNegocio) -> int:
+    """Negocios cuyos productos nacen como mercadería (tiendas): los productos vivos que aún no
+    controlan inventario (sin receta ni mercadería) pasan a ser mercadería en 0. Devuelve cuántos.
+
+    Así "primero se carga el inventario": hay que comprarlos o importarlos antes de venderlos.
+    """
+    if not existencias.operacion(con, ctx.negocio_id).get("mercaderia_por_defecto"):
+        return 0
+    con_receta = sa.select(ops_receta_linea.c.item_id).where(
+        ops_receta_linea.c.negocio_id == ctx.negocio_id, ops_receta_linea.c.eliminado_en.is_(None))
+    sin_control = con.execute(
+        ais.seleccionar(ctx, ops_item, ops_item.c.id).where(ops_item.c.id.not_in(con_receta))
+    ).scalars().all()
+    for item_id in sin_control:
+        mercaderia.activar(con, ctx, item_id)
+    return len(sin_control)
 
 
 def _aviso_nombre_repetido(con, ctx, nombre: str, tipo_item: str,
@@ -329,6 +354,8 @@ def crear_item(con: Connection, ctx: ais.ContextoNegocio, datos: ItemIn) -> Item
         "id": uuid7(), "item_id": item_id, "nombre": NOMBRE_VARIANTE_IMPLICITA,
         "precio_venta": datos.precio_venta,
     }))
+    if existencias.operacion(con, ctx.negocio_id).get("mercaderia_por_defecto"):
+        mercaderia.activar(con, ctx, item_id)  # en tiendas: nace como mercadería en 0
     return obtener_item(con, ctx, item_id, aviso)
 
 

@@ -397,9 +397,9 @@
 .tu-mes__nota { margin: var(--esp-3) 0 0; color: var(--color-texto-2); font-size: var(--texto-pequeno); }
 
 /* Tus impuestos */
-.impuestos { display: flex; flex-direction: column; gap: var(--esp-3); }
-.impuestos .boton-primario { width: 100%; }
-.impuestos .entrada__texto { margin: 0; }
+.impuestos, .reglas-venta { display: flex; flex-direction: column; gap: var(--esp-3); }
+.impuestos .boton-primario, .reglas-venta .boton-primario { width: 100%; }
+.impuestos .entrada__texto, .reglas-venta .entrada__texto { margin: 0; }
 
 /* Inicio: "Hoy" y "Tu meta del mes" */
 .hoy__caja { margin: var(--esp-3) 0 0; display: flex; align-items: center; gap: var(--esp-2); }
@@ -470,3 +470,9 @@
 .producto-importado { display: grid; gap: var(--esp-2); }
 .lineas-importadas { margin: 0; padding-left: var(--esp-4); color: var(--color-texto-2); font-size: var(--texto-pequeno); }
 .subir-plantilla .btn { min-height: var(--toque-minimo); }
+
+/* Existencia en Vender: "Quedan 3", "Agotado" */
+.existencia { margin-right: var(--esp-2); color: var(--color-texto-2); font-size: var(--texto-pequeno); }
+.existencia--agotado { color: var(--color-alerta); font-weight: 600; }
+.lista-opciones__item--agotado { opacity: 0.55; cursor: not-allowed; }
+.opcion-variante:disabled { opacity: 0.5; cursor: not-allowed; }

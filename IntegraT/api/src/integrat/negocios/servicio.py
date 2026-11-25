@@ -32,7 +32,14 @@ from integrat.db.tipos import ahora_utc, uuid7
 from integrat.gastos.servicio import sembrar_categorias as sembrar_categorias_gasto
 from integrat.insumos.recetas import contar_items_con_receta
 from integrat.items.servicio import sembrar_catalogo
-from integrat.negocios.esquemas import ImpuestosIn, NegocioIn, NegocioOut, PreciosIn, PrimerPaso
+from integrat.negocios.esquemas import (
+    ImpuestosIn,
+    NegocioIn,
+    NegocioOut,
+    PreciosIn,
+    PrimerPaso,
+    ReglasVentaIn,
+)
 
 PAIS_INICIAL = "GT"  # Guatemala; el país será configurable cuando haya más
 OPERACION_CREAR_NEGOCIO = "crear_negocio"
@@ -101,6 +108,15 @@ def crear_negocio_idempotente(
     raise AssertionError("inalcanzable")
 
 
+def _regla_inicial(con: Connection, tipo: str) -> str:
+    contenido = con.execute(
+        sa.select(core_cfg_tipo_negocio_plantilla.c.contenido).where(
+            core_cfg_tipo_negocio_plantilla.c.tipo_negocio_codigo == tipo,
+            core_cfg_tipo_negocio_plantilla.c.tipo_plantilla == "operacion")
+    ).scalar_one_or_none() or {}
+    return contenido.get("vender_sin_existencia", "avisar")
+
+
 def crear_negocio(con: Connection, usuario_id: uuid.UUID, datos: NegocioIn) -> ais.ContextoNegocio:
     """Crea negocio + membresía de dueño + capacidades del tipo (+ titular si da factura).
 
@@ -133,6 +149,7 @@ def crear_negocio(con: Connection, usuario_id: uuid.UUID, datos: NegocioIn) -> a
         tipo_negocio_codigo=tipo, pais_codigo=PAIS_INICIAL,
         zona_horaria=pais.zona_horaria_defecto, moneda_codigo=pais.moneda_codigo,
         estado_onboarding={"da_factura": datos.da_factura, "pasos_hechos": []},
+        vender_sin_existencia=_regla_inicial(con, tipo),
         creado_por=usuario_id,
     ))
     ctx = ais.ContextoNegocio(negocio_id, usuario_id)
@@ -156,6 +173,11 @@ def crear_negocio(con: Connection, usuario_id: uuid.UUID, datos: NegocioIn) -> a
     sembrar_categorias_gasto(con, ctx, tipo)
     contabilidad.crear_libro(con, ctx)  # libro y plan de cuentas del negocio
     return ctx
+
+
+def fijar_reglas_venta(con: Connection, ctx: ais.ContextoNegocio, datos: ReglasVentaIn) -> None:
+    con.execute(sa.update(core_negocio).where(core_negocio.c.id == ctx.negocio_id).values(
+        vender_sin_existencia=datos.vender_sin_existencia, actualizado_por=ctx.usuario_id))
 
 
 def fijar_precios(con: Connection, ctx: ais.ContextoNegocio, datos: PreciosIn) -> None:
@@ -275,5 +297,6 @@ def leer_negocio(con: Connection, ctx: ais.ContextoNegocio) -> NegocioOut | None
         zona_horaria=negocio["zona_horaria"], da_factura=estado.get("da_factura", "no_se"),
         regimen_iva=_regimen_simple(regimen),
         margen_objetivo=f"{negocio['margen_objetivo_defecto']:.4f}",
+        vender_sin_existencia=negocio["vender_sin_existencia"],
         capacidades=list(capacidades), vocabulario=vocabulario, primeros_pasos=pasos,
     )

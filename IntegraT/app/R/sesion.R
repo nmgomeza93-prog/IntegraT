@@ -11,7 +11,8 @@ sesion_nueva <- function() {
     abrir_cierre = 0L,  # ídem para "Cerrar el día"
     cuentas_v = 0L,  # sube cuando cambia algo que mueve las cuentas (para el resumen del Inicio)
     regimen_iva = NULL,  # el régimen elegido en "Tus impuestos" (si no, el del negocio)
-    margen_objetivo = NULL  # el margen elegido en "Tu margen de ganancia" (si no, el del negocio)
+    margen_objetivo = NULL,  # el margen elegido en "Tu margen de ganancia" (si no, el del negocio)
+    vender_sin_existencia = NULL  # la regla elegida en "Si no hay inventario" (si no, la del negocio)
   )
 }
 
@@ -38,7 +39,13 @@ sesion_cerrar <- function(s) {
   s$cuentas_v <- 0L
   s$regimen_iva <- NULL
   s$margen_objetivo <- NULL
+  s$vender_sin_existencia <- NULL
   invisible(s)
+}
+
+# Regla vigente para vender sin existencia: "bloquear" o "avisar".
+regla_venta_actual <- function(s) {
+  s$vender_sin_existencia %||% s$negocio$vender_sin_existencia %||% "avisar"
 }
 
 # Régimen de IVA vigente en la sesión: "general", "pequeno" o "no_se".

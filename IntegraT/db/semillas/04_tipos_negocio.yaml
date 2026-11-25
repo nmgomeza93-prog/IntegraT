@@ -154,3 +154,17 @@
         atributos:
           - {nombre: Tamaño, valores: [Pequeño, Mediano, Grande]}
         categorias_sugeridas: []
+
+# Cómo opera cada tipo de negocio (docs/ANALISIS_INVENTARIO_Y_CLIENTES.md):
+# - vender_sin_existencia: regla con que nace el negocio (bloquear o avisar; se cambia en Más).
+# - mercaderia_por_defecto: todo producto nuevo nace como mercadería en 0 (primero se compra o importa).
+- tabla: core_cfg_tipo_negocio_plantilla
+  filas:
+    - tipo_negocio_codigo: ventas_en_linea
+      tipo_plantilla: operacion
+      version_plantilla: 1
+      contenido: {vender_sin_existencia: bloquear, mercaderia_por_defecto: true}
+    - tipo_negocio_codigo: restaurante
+      tipo_plantilla: operacion
+      version_plantilla: 1
+      contenido: {vender_sin_existencia: avisar, mercaderia_por_defecto: false}

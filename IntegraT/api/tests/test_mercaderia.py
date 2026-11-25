@@ -1,4 +1,8 @@
-"""Mercadería para revender: un producto que se compra hecho usa insumo + receta de 1 unidad."""
+"""Mercadería para revender: un producto que se compra hecho usa insumo + receta de 1 unidad.
+
+La mecánica se prueba en un negocio cuyos productos NO nacen como mercadería (un restaurante que
+revende gaseosas); que en las tiendas nazcan así lo cubre tests/test_existencias.py.
+"""
 
 import pytest
 import sqlalchemy as sa
@@ -8,14 +12,14 @@ from conftest import con_token, crear_negocio_api, registrar_usuario
 @pytest.fixture
 def tienda(cliente_api):
     sesion = registrar_usuario(cliente_api, "Ana")
-    negocio = crear_negocio_api(cliente_api, sesion, "Tienda de Ana", "ventas_en_linea")
+    negocio = crear_negocio_api(cliente_api, sesion, "Comedor de Ana", "restaurante")
     return cliente_api, negocio, con_token(negocio["acceso"])
 
 
 @pytest.fixture
 def otra_tienda(cliente_api):
     sesion = registrar_usuario(cliente_api, "Luis")
-    negocio = crear_negocio_api(cliente_api, sesion, "Tienda de Luis", "ventas_en_linea")
+    negocio = crear_negocio_api(cliente_api, sesion, "Comedor de Luis", "restaurante")
     return cliente_api, negocio, con_token(negocio["acceso"])
 
 

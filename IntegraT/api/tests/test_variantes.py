@@ -184,7 +184,9 @@ def vender(cliente, h, item, variante=None, cantidad=1):
 
 
 def test_vender_un_producto_con_variantes_exige_elegir(tienda):
-    cliente, _, h = tienda
+    cliente, negocio, h = tienda
+    cliente.put(f"/v1/negocios/{negocio['id']}/ventas", headers=h,
+                json={"vender_sin_existencia": "avisar"})  # sin cargar inventario
     pijama = producto(cliente, h)
     s, m = variantes(cliente, h, pijama, [v("S", precio="110.00"), v("M")]).json()["variantes"]
     r = vender(cliente, h, pijama)

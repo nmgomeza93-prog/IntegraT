@@ -38,9 +38,14 @@ class NegocioOut(BaseModel):
     da_factura: DaFactura
     regimen_iva: RegimenIva = "no_se"
     margen_objetivo: str = "0.3500"  # margen objetivo del negocio (precio sugerido y meta)
+    vender_sin_existencia: Literal["bloquear", "avisar"] = "avisar"
     capacidades: list[str]  # solo las activas
     vocabulario: dict[str, str]  # palabras de la interfaz según el tipo
     primeros_pasos: list[PrimerPaso]
+
+
+class ReglasVentaIn(BaseModel):
+    vender_sin_existencia: Literal["bloquear", "avisar"]
 
 
 class PreciosIn(BaseModel):

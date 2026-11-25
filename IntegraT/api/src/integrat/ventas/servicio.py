@@ -14,6 +14,7 @@ from decimal import Decimal
 import sqlalchemy as sa
 from sqlalchemy.engine import Connection, Engine
 
+from integrat import existencias
 from integrat.contabilidad import eventos as contabilidad
 from integrat.db import aislamiento as ais
 from integrat.db.tablas import (
@@ -141,6 +142,7 @@ def crear_venta(con: Connection, ctx: ais.ContextoNegocio, datos: VentaIn) -> Ve
 
     lineas = []
     vendidas: dict[tuple[uuid.UUID, uuid.UUID], int] = defaultdict(int)  # (ítem, variante real)
+    nombres: dict[tuple[uuid.UUID, uuid.UUID], str] = {}
     for (item_id, variante_id), cantidad in pedidas.items():
         fila = _resolver(por_item, item_id, variante_id)
         precio = Decimal(fila.precio_venta).quantize(CENTAVO)
@@ -153,6 +155,9 @@ def crear_venta(con: Connection, ctx: ais.ContextoNegocio, datos: VentaIn) -> Ve
             "total": (precio * cantidad).quantize(CENTAVO),
         })
         vendidas[(item_id, fila.variante_id)] += cantidad
+        nombres[(item_id, fila.variante_id)] = nombre
+    # Antes de numerar y cobrar: si el negocio no vende sin existencia, que todo alcance.
+    existencias.verificar(con, ctx, dict(vendidas), nombres)
     total = sum((linea["total"] for linea in lineas), Decimal("0.00"))
     moneda = con.execute(
         sa.select(core_negocio.c.moneda_codigo).where(core_negocio.c.id == ctx.negocio_id)

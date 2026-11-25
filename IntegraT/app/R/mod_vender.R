@@ -48,6 +48,17 @@ mod_vender_ui <- function(id, vocab) {
   htmltools::tags$div(class = "vender", shiny::uiOutput(ns("contenido")))
 }
 
+# Texto y estado de la existencia de un producto o variante (lo calcula la API).
+# `bloquea`: el negocio no vende lo que no hay. Devuelve list(texto, agotado).
+estado_existencia <- function(disponible, controla, bloquea) {
+  if (!isTRUE(controla) && is.null(disponible)) {
+    return(list(texto = if (bloquea) "Sin inventario" else NULL, agotado = bloquea))
+  }
+  n <- as.integer(disponible %||% 0L)
+  if (n <= 0) return(list(texto = "Agotado", agotado = bloquea))
+  list(texto = paste("Quedan", n), agotado = FALSE)
+}
+
 mod_vender_server <- function(id, s, ir_a) {
   shiny::moduleServer(id, function(input, output, session) {
     ns <- session$ns
@@ -118,6 +129,21 @@ mod_vender_server <- function(id, s, ir_a) {
         )
       }
       lineas
+    }
+
+    bloquea <- function() identical(regla_venta_actual(s), "bloquear")
+
+    # Lo que queda (para el tope del carrito): de la variante o del producto; NULL = sin tope.
+    disponible_de <- function(clave) {
+      partes <- strsplit(clave, "|", fixed = TRUE)[[1]]
+      item <- items_por_id()[[partes[1]]]
+      if (is.null(item) || !bloquea()) return(NULL)
+      if (length(partes) > 1) {
+        v <- Filter(function(x) identical(x$id, partes[2]), item$variantes %||% list())
+        return(if (length(v)) as.integer(v[[1]]$disponible %||% 0L) else 0L)
+      }
+      if (!isTRUE(item$controla_inventario)) return(0L)
+      as.integer(item$disponible %||% 0L)
     }
 
     # Cuántas unidades de un producto hay en el carrito (sumando sus variantes).
@@ -197,13 +223,16 @@ mod_vender_server <- function(id, s, ir_a) {
         htmltools::tags$div(
           class = "elegir-variante__opciones",
           lapply(item$variantes, function(x) {
+            ex <- estado_existencia(x$disponible, !is.null(x$disponible), bloquea())
             htmltools::tags$button(
               type = "button", class = "opcion-variante",
-              `data-elige-input` = ns("agregar_variante"),
+              disabled = if (isTRUE(ex$agotado)) NA,
+              `data-elige-input` = if (!isTRUE(ex$agotado)) ns("agregar_variante"),
               `data-elige-valor` = paste0(item$id, "|", x$id),
               htmltools::tags$span(class = "opcion-variante__nombre", x$nombre),
               htmltools::tags$span(class = "opcion-variante__precio",
-                                   formato_dinero(as.numeric(x$precio_venta)))
+                                   formato_dinero(as.numeric(x$precio_venta)),
+                                   if (!is.null(ex$texto)) paste0(" \u00b7 ", ex$texto))
             )
           })
         ),
@@ -232,14 +261,24 @@ mod_vender_server <- function(id, s, ir_a) {
             class = "lista-opciones",
             lapply(g$items, function(i) {
               n <- en_carrito_de(i$id)
+              ex <- estado_existencia(i$disponible, i$controla_inventario, bloquea())
               item_lista(
                 "tag", i$nombre,
                 htmltools::tagList(
+                  if (!is.null(ex$texto)) {
+                    htmltools::tags$span(
+                      class = paste("existencia", if (identical(ex$texto, "Agotado") ||
+                                                        identical(ex$texto, "Sin inventario"))
+                        "existencia--agotado"), ex$texto)
+                  },
                   if (!is.null(n)) htmltools::tags$span(class = "cantidad-insignia", paste0("×", n)),
                   if (isTRUE(i$tiene_variantes)) "desde ",
                   formato_dinero(as.numeric(i$precio_venta))
                 ),
-                `data-elige-input` = ns("agregar_item"), `data-elige-valor` = i$id
+                class = if (isTRUE(ex$agotado)) "lista-opciones__item--agotado",
+                disabled = if (isTRUE(ex$agotado)) NA,
+                `data-elige-input` = if (!isTRUE(ex$agotado)) ns("agregar_item"),
+                `data-elige-valor` = i$id
               )
             })
           )
@@ -479,8 +518,16 @@ mod_vender_server <- function(id, s, ir_a) {
 
     sumar <- function(clave) {
       actual <- carrito()
+      tope <- disponible_de(clave)
+      if (!is.null(tope) && (actual[[clave]] %||% 0L) >= tope) {
+        shiny::showNotification(
+          if (tope == 0) "Ese ya no tiene existencia." else paste("Solo quedan", tope, "de ese."),
+          duration = 4, closeButton = FALSE, id = "vender-tope")
+        return(invisible(FALSE))
+      }
       actual[[clave]] <- min((actual[[clave]] %||% 0L) + 1L, 999L)
       carrito(actual)
+      invisible(TRUE)
     }
 
     shiny::observeEvent(input$agregar_item, {
@@ -508,8 +555,12 @@ mod_vender_server <- function(id, s, ir_a) {
     shiny::observeEvent(input$ajustar, {
       partes <- strsplit(input$ajustar, ":", fixed = TRUE)[[1]]
       if (length(partes) != 2 || !partes[2] %in% names(carrito())) return()
+      if (partes[1] == "mas") {
+        sumar(partes[2])
+        return()
+      }
       actual <- carrito()
-      nueva <- (actual[[partes[2]]] %||% 0L) + if (partes[1] == "mas") 1L else -1L
+      nueva <- (actual[[partes[2]]] %||% 0L) - 1L
       actual[[partes[2]]] <- if (nueva > 0L) min(nueva, 999L) else NULL
       carrito(actual)
       error(NULL)
@@ -546,7 +597,7 @@ mod_vender_server <- function(id, s, ir_a) {
       )
       if (!r$ok) {
         # Si algo ya no está disponible, se recarga la lista para que la persona lo vea.
-        if (r$estado == 422L) refresco(refresco() + 1L)
+        if (r$estado %in% c(409L, 422L)) refresco(refresco() + 1L)
         return(error(r$mensaje))
       }
       error(NULL)

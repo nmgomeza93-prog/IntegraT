@@ -102,6 +102,9 @@ def listar_items(
     limite: Annotated[int, Query(ge=1, le=200)] = 50,
     desplazar: Annotated[int, Query(ge=0)] = 0,
 ) -> ListaItemsOut:
+    if not archivados and acceso.rol in {"dueno", "administrador"}:
+        with engine.begin() as con:  # tiendas: lo que aún no controla inventario pasa a mercadería
+            servicio.asegurar_mercaderia(con, acceso.contexto)
     with engine.connect() as con:
         return servicio.listar_items(
             con, acceso.contexto, categoria_id=categoria_id, buscar=buscar,
