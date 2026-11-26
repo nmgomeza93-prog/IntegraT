@@ -8,6 +8,7 @@ from datetime import timedelta
 import sqlalchemy as sa
 from sqlalchemy.engine import Connection, Engine
 
+from integrat import validaciones as val
 from integrat.contabilidad import motor as contabilidad
 from integrat.db import aislamiento as ais
 from integrat.db.tablas import (
@@ -33,6 +34,7 @@ from integrat.gastos.servicio import sembrar_categorias as sembrar_categorias_ga
 from integrat.insumos.recetas import contar_items_con_receta
 from integrat.items.servicio import sembrar_catalogo
 from integrat.negocios.esquemas import (
+    DatosNegocioIn,
     ImpuestosIn,
     NegocioIn,
     NegocioOut,
@@ -207,6 +209,50 @@ def _regimen_simple(codigo: str | None) -> str:
     return next((simple for simple, c in REGIMEN_IVA.items() if c == codigo and c), "no_se")
 
 
+def _abrir_titular(con: Connection, ctx: ais.ContextoNegocio) -> uuid.UUID:
+    """Crea el titular (quien responde ante la SAT) y lo liga a quien lo abre."""
+    titular_id = uuid7()
+    con.execute(sa.insert(core_titular).values(
+        id=titular_id, pais_codigo=PAIS_INICIAL, estado="pendiente", creado_por=ctx.usuario_id,
+    ))
+    con.execute(sa.insert(core_membresia_titular).values(
+        id=uuid7(), usuario_id=ctx.usuario_id, titular_id=titular_id, rol="titular_admin",
+        creado_por=ctx.usuario_id,
+    ))
+    return titular_id
+
+
+def fijar_datos(con: Connection, ctx: ais.ContextoNegocio, datos: DatosNegocioIn) -> None:
+    """Mi negocio: contacto en core_negocio; NIT y nombre fiscal en su titular."""
+    enviados = datos.model_fields_set
+    valores: dict = {}
+    if "nombre" in enviados and datos.nombre is not None:
+        valores["nombre"] = datos.nombre
+    if "telefono" in enviados:
+        valores["telefono"] = val.telefono(datos.telefono) if datos.telefono else None
+    if "correo" in enviados:
+        valores["correo"] = val.correo(datos.correo) if datos.correo else None
+    if "direccion" in enviados:
+        valores["direccion"] = datos.direccion or None
+    fiscal: dict = {}
+    if "nit" in enviados:
+        fiscal["nit"] = val.nit(datos.nit) if datos.nit else None
+    if "nombre_fiscal" in enviados:
+        fiscal["nombre_fiscal"] = datos.nombre_fiscal or None
+    negocio = con.execute(sa.select(core_negocio.c.titular_id)
+                          .where(core_negocio.c.id == ctx.negocio_id).with_for_update()).one()
+    if fiscal:
+        titular_id = negocio.titular_id
+        if titular_id is None:
+            titular_id = _abrir_titular(con, ctx)
+            valores["titular_id"] = titular_id
+        con.execute(sa.update(core_titular).where(core_titular.c.id == titular_id).values(
+            **fiscal, actualizado_por=ctx.usuario_id, version=core_titular.c.version + 1))
+    if valores:
+        con.execute(sa.update(core_negocio).where(core_negocio.c.id == ctx.negocio_id)
+                    .values(**valores, actualizado_por=ctx.usuario_id))
+
+
 def fijar_impuestos(con: Connection, ctx: ais.ContextoNegocio, datos: ImpuestosIn) -> None:
     """Fija el régimen de IVA del titular del negocio (lo abre si aún no existe).
 
@@ -221,15 +267,7 @@ def fijar_impuestos(con: Connection, ctx: ais.ContextoNegocio, datos: ImpuestosI
     if titular_id is None:
         if codigo is None:
             return  # sin titular ya es "todavía no sé"
-        titular_id = uuid7()
-        con.execute(sa.insert(core_titular).values(
-            id=titular_id, pais_codigo=PAIS_INICIAL, estado="pendiente",
-            creado_por=ctx.usuario_id,
-        ))
-        con.execute(sa.insert(core_membresia_titular).values(
-            id=uuid7(), usuario_id=ctx.usuario_id, titular_id=titular_id, rol="titular_admin",
-            creado_por=ctx.usuario_id,
-        ))
+        titular_id = _abrir_titular(con, ctx)
     con.execute(sa.update(core_titular).where(core_titular.c.id == titular_id).values(
         regimen_iva_codigo=codigo, actualizado_por=ctx.usuario_id,
         version=core_titular.c.version + 1,
@@ -283,12 +321,14 @@ def leer_negocio(con: Connection, ctx: ais.ContextoNegocio) -> NegocioOut | None
         )
     ).scalar_one_or_none() or {}
     estado = negocio["estado_onboarding"] or {}
-    regimen = None
+    regimen = titular = None
     if negocio["titular_id"] is not None:
-        regimen = con.execute(
-            sa.select(core_titular.c.regimen_iva_codigo)
+        titular = con.execute(
+            sa.select(core_titular.c.regimen_iva_codigo, core_titular.c.nit,
+                      core_titular.c.nombre_fiscal)
             .where(core_titular.c.id == negocio["titular_id"])
-        ).scalar_one_or_none()
+        ).first()
+        regimen = titular.regimen_iva_codigo if titular else None
     hechos = set(estado.get("pasos_hechos", []))
     items = con.execute(ais.seleccionar(ctx, ops_item, sa.func.count())).scalar_one()
     ventas = con.execute(
@@ -316,5 +356,8 @@ def leer_negocio(con: Connection, ctx: ais.ContextoNegocio) -> NegocioOut | None
         margen_objetivo=f"{negocio['margen_objetivo_defecto']:.4f}",
         vender_sin_existencia=negocio["vender_sin_existencia"],
         minimo_defecto=f"{negocio['minimo_defecto']:.2f}",
+        telefono=negocio["telefono"], correo=negocio["correo"], direccion=negocio["direccion"],
+        nit=titular.nit if titular else None,
+        nombre_fiscal=titular.nombre_fiscal if titular else None,
         capacidades=list(capacidades), vocabulario=vocabulario, primeros_pasos=pasos,
     )

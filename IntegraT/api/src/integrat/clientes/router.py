@@ -10,9 +10,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.engine import Engine
 
+from integrat import validaciones as val
 from integrat.auth.dependencias import AccesoNegocio, acceso_negocio
 from integrat.clientes import servicio
-from integrat.clientes import validaciones as val
 from integrat.clientes.esquemas import (
     CampoOut,
     CamposIn,

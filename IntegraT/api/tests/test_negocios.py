@@ -105,3 +105,36 @@ def test_crear_negocio_exige_sesion_y_datos_validos(cliente_api):
     assert cliente_api.post("/v1/negocios", headers=con_token(sesion), json=malo).status_code == 422
     malo = {**cuerpo, "da_factura": "quizas"}
     assert cliente_api.post("/v1/negocios", headers=con_token(sesion), json=malo).status_code == 422
+
+
+# ------------------------------------------------------------------ Mi negocio
+
+
+def test_mi_negocio_cambia_contacto_y_datos_para_facturar(cliente_api, bd_migrada):
+    sesion = registrar_usuario(cliente_api, "Mari")
+    negocio = crear_negocio_api(cliente_api, sesion, "Comedor", "restaurante")
+    h = con_token(negocio["acceso"])
+    ruta = f"/v1/negocios/{negocio['id']}"
+    r = cliente_api.put(f"{ruta}/datos", headers=h, json={
+        "nombre": "Comedor Doña Mari", "telefono": "5555-1234", "correo": "Mari@Gmail.com",
+        "direccion": "Zona 1", "nit": "1234567-9", "nombre_fiscal": "María Pérez"})
+    assert r.status_code == 204, r.text
+    n = cliente_api.get(ruta, headers=h).json()
+    assert (n["nombre"], n["telefono"], n["correo"], n["direccion"], n["nit"],
+            n["nombre_fiscal"]) == ("Comedor Doña Mari", "+50255551234", "mari@gmail.com",
+                                    "Zona 1", "12345679", "María Pérez")
+    # Solo cambia lo que se envía; null lo borra.
+    cliente_api.put(f"{ruta}/datos", headers=h, json={"direccion": None})
+    n = cliente_api.get(ruta, headers=h).json()
+    assert n["direccion"] is None and n["nombre"] == "Comedor Doña Mari"
+    r = cliente_api.put(f"{ruta}/datos", headers=h, json={"nit": "1234567-8"})
+    assert r.status_code == 422 and "NIT" in r.json()["detail"]
+    r = cliente_api.put(f"{ruta}/datos", headers=h, json={"nombre": "C"})
+    assert r.json()["detail"] == "Revisa el nombre: escribe al menos 2 letras."
+    # Un administrador cambia el contacto, pero no el NIT.
+    with bd_migrada.begin() as con:
+        con.execute(sa.text("UPDATE core_membresia SET rol = 'administrador' "
+                            "WHERE negocio_id = UUID_TO_BIN(:n)"), {"n": negocio["id"]})
+    assert cliente_api.put(f"{ruta}/datos", headers=h,
+                           json={"telefono": "44441234"}).status_code == 204
+    assert cliente_api.put(f"{ruta}/datos", headers=h, json={"nit": "CF"}).status_code == 403

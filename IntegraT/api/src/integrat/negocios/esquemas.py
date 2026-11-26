@@ -40,9 +40,27 @@ class NegocioOut(BaseModel):
     margen_objetivo: str = "0.3500"  # margen objetivo del negocio (precio sugerido y meta)
     vender_sin_existencia: Literal["bloquear", "avisar"] = "avisar"
     minimo_defecto: str = "0.00"  # unidades con que la mercadería nueva avisa "por agotarse"
+    telefono: str | None = None   # normalizado: +50255551234
+    correo: str | None = None
+    direccion: str | None = None
+    nit: str | None = None        # del titular, sin guion
+    nombre_fiscal: str | None = None
     capacidades: list[str]  # solo las activas
     vocabulario: dict[str, str]  # palabras de la interfaz según el tipo
     primeros_pasos: list[PrimerPaso]
+
+
+class DatosNegocioIn(BaseModel):
+    """Mi negocio. Solo cambia lo que se envía; null lo borra. NIT y nombre fiscal: el dueño."""
+
+    nombre: NombreNegocio | None = None
+    telefono: Annotated[str, StringConstraints(strip_whitespace=True, max_length=30)] | None = None
+    correo: Annotated[str, StringConstraints(strip_whitespace=True, max_length=120)] | None = None
+    direccion: Annotated[str, StringConstraints(strip_whitespace=True,
+                                                max_length=255)] | None = None
+    nit: Annotated[str, StringConstraints(strip_whitespace=True, max_length=20)] | None = None
+    nombre_fiscal: Annotated[str, StringConstraints(strip_whitespace=True,
+                                                    max_length=200)] | None = None
 
 
 class ReglasVentaIn(BaseModel):

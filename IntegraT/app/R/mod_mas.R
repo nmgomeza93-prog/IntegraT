@@ -17,9 +17,9 @@ mod_mas_ui <- function(id) {
       item_lista("percent", "Tu margen de ganancia", id = ns("margen"), class = "action-button"),
       item_lista("box2", "Si no hay inventario", id = ns("reglas_venta"), class = "action-button"),
       item_lista("bank", "Tus impuestos", id = ns("impuestos"), class = "action-button"),
-      item_lista("bar-chart-line", "Informes", "Pronto", id = ns("informes"),
+      item_lista("bar-chart-line", "Informe del mes", id = ns("informes"),
                  class = "action-button"),
-      item_lista("shop", "Mi negocio", "Pronto", id = ns("negocio"), class = "action-button"),
+      item_lista("shop", "Mi negocio", id = ns("negocio"), class = "action-button"),
       item_lista("question-circle", "Ayuda", "Pronto", id = ns("ayuda"), class = "action-button"),
       item_lista("box-arrow-right", "Salir de mi cuenta", id = ns("salir"), class = "action-button")
     ),
@@ -53,7 +53,9 @@ mod_mas_server <- function(id, al_salir, ir_a) {
     shiny::observeEvent(input$margen, ir_a("margen"))
     shiny::observeEvent(input$reglas_venta, ir_a("reglas_venta"))
     shiny::observeEvent(input$importaciones, ir_a("importaciones"))
-    for (opcion in c("informes", "negocio", "ayuda")) {
+    shiny::observeEvent(input$negocio, ir_a("negocio"))
+    shiny::observeEvent(input$informes, ir_a("informes"))
+    for (opcion in c("ayuda")) {
       local({
         o <- opcion
         shiny::observeEvent(input[[o]], aviso_pronto())

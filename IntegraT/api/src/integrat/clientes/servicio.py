@@ -13,7 +13,7 @@ from decimal import Decimal
 import sqlalchemy as sa
 from sqlalchemy.engine import Connection
 
-from integrat.clientes import validaciones as val
+from integrat import validaciones as val
 from integrat.clientes.esquemas import (
     CampoOut,
     CamposIn,

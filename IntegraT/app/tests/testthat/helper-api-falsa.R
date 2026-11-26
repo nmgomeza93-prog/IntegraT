@@ -98,11 +98,15 @@ iniciar_api_falsa <- function(env = parent.frame()) {
            regimen_iva = estado$regimen, margen_objetivo = estado$margen,
            vender_sin_existencia = estado$regla_venta,
            minimo_defecto = sprintf("%.2f", estado$minimo), capacidades = list("recetas", "mesas"),
+           telefono = estado$datos_negocio$telefono, correo = estado$datos_negocio$correo,
+           direccion = estado$datos_negocio$direccion, nit = estado$datos_negocio$nit,
+           nombre_fiscal = estado$datos_negocio$nombre_fiscal,
            vocabulario = vocab[[tipo]], primeros_pasos = pasos_al_dia(tipo))
     }
     estado$regimen <- "no_se"
     estado$margen <- "0.3500"
     estado$regla_venta <- "avisar"   # Mari es un restaurante: avisa y deja vender
+    estado$datos_negocio <- list()
     estado$minimo <- 2L               # "por agotarse" con 2 o menos (versión simple)
     estado$atributos <- list(
       list(id = "at-1", nombre = "Talla",
@@ -399,6 +403,7 @@ iniciar_api_falsa <- function(env = parent.frame()) {
                               compras = estado$compras_creadas,
                               anulaciones_compra = estado$anulaciones_compra,
                               proveedores = length(estado$proveedores),
+                              negocio_datos = estado$datos_negocio,
                               clientes = sum(vapply(estado$clientes, function(c) !isTRUE(c$archivado), NA)),
                               cliente_ultima_venta = if (length(estado$ventas) > 0)
                                 estado$ventas[[length(estado$ventas)]]$cliente_id,
@@ -513,6 +518,21 @@ iniciar_api_falsa <- function(env = parent.frame()) {
         it <- estado$items[[d$item_id]]
         it["stock"] <- list(if (is.null(d$n)) NULL else as.integer(d$n))
         estado$items[[d$item_id]] <- it
+        return(json(200, list()))
+      }
+      if (grepl("^/v1/negocios/[^/]+/datos$", ruta) && metodo == "PUT") {
+        d <- leer(req)
+        if (!is.null(d$nombre) && nchar(trimws(d$nombre)) < 2) {
+          return(json(422, list(detail = "Revisa el nombre: escribe al menos 2 letras.")))
+        }
+        if (!is.null(d$nit) && !grepl("^[0-9]+-?[0-9K]$", d$nit)) {
+          return(json(422, list(detail = "Revisa el NIT: números y al final un número o K (ej. 1234567-9).")))
+        }
+        actual <- estado$datos_negocio
+        for (k in names(d)) actual[k] <- list(d[[k]])
+        if (!is.null(actual$telefono)) actual$telefono <- paste0("+502", gsub("[^0-9]", "", actual$telefono))
+        if (!is.null(actual$nit)) actual$nit <- gsub("-", "", actual$nit)
+        estado$datos_negocio <- actual
         return(json(200, list()))
       }
       if (grepl("^/v1/negocios/[^/]+/ventas$", ruta) && metodo == "PUT") {
@@ -774,6 +794,42 @@ iniciar_api_falsa <- function(env = parent.frame()) {
       }
       # Resultados del mes: versión simple de lo que calcula la API real desde los asientos
       # (ventas pagadas menos gastos; en el régimen general, sin el 12 % de IVA de las ventas).
+      if (ruta == "/v1/informes/mes" && metodo == "GET") {
+        consulta <- req$QUERY_STRING %||% ""
+        mes <- if (grepl("mes=[0-9]{4}-[0-9]{2}", consulta)) {
+          sub(".*mes=([0-9]{4}-[0-9]{2}).*", "\\1", consulta)
+        } else format(Sys.Date(), "%Y-%m")
+        del_mes <- Filter(function(v) startsWith(v$fecha_hora, mes), estado$ventas)
+        vigentes <- Filter(function(v) identical(v$estado, "pagada"), del_mes)
+        suma <- function(vs) sprintf("%.2f", sum(vapply(vs, function(v) as.numeric(v$total), 0)))
+        prod <- list()
+        for (v in vigentes) for (l in v$lineas) {
+          p <- prod[[l$nombre]] %||% list(nombre = l$nombre, cantidad = 0L, total = 0)
+          p$cantidad <- p$cantidad + as.integer(l$cantidad)
+          p$total <- p$total + as.numeric(l$total)
+          prod[[l$nombre]] <- p
+        }
+        prod <- unname(prod)[order(-vapply(prod, function(p) p$total, 0))]
+        prod <- lapply(prod, function(p) { p$total <- sprintf("%.2f", p$total); p })
+        con_cliente <- Filter(function(v) !is.null(v$cliente_id), vigentes)
+        sin_cliente <- Filter(function(v) is.null(v$cliente_id), vigentes)
+        ids <- unique(vapply(con_cliente, function(v) v$cliente_id, ""))
+        clientes <- lapply(ids, function(id) {
+          suyas <- Filter(function(v) identical(v$cliente_id, id), con_cliente)
+          list(cliente_id = id, nombre = estado$clientes[[id]]$nombre, compras = length(suyas),
+               total = suma(suyas))
+        })
+        medios <- lapply(unique(vapply(vigentes, function(v) v$medio_pago, "")), function(m) {
+          suyas <- Filter(function(v) identical(v$medio_pago, m), vigentes)
+          list(medio_pago = m, ventas = length(suyas), total = suma(suyas))
+        })
+        return(json(200, list(
+          mes = mes, ventas = length(vigentes), total = suma(vigentes),
+          anuladas = length(del_mes) - length(vigentes), productos = prod, clientes = clientes,
+          consumidor_final = list(cliente_id = NULL, nombre = "Consumidor final",
+                                  compras = length(sin_cliente), total = suma(sin_cliente)),
+          medios = medios)))
+      }
       if (ruta == "/v1/resultados" && metodo == "GET") {
         estado$resultados_llamadas <- estado$resultados_llamadas + 1L
         if (identical(auth, "Bearer token-cajero")) {
@@ -796,7 +852,8 @@ iniciar_api_falsa <- function(env = parent.frame()) {
         return(json(200, negocio("n-nuevo", estado$nombre_nuevo, estado$tipo, estado$factura_nueva)))
       }
       if (ruta == "/v1/negocios/n-mari") {
-        return(json(200, negocio("n-mari", "Comedor Doña Mari", "restaurante", "no")))
+        return(json(200, negocio("n-mari", estado$datos_negocio$nombre %||% "Comedor Doña Mari",
+                                 "restaurante", "no")))
       }
       if (ruta == "/v1/categorias" && metodo == "GET") {
         return(json(200, categorias_de(estado$tipo)))

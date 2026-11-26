@@ -1,4 +1,4 @@
-"""Validaciones de los datos de un cliente (las aplica la API, nunca la app).
+"""Validaciones de contacto y fiscales (clientes y negocio); las aplica la API, no la app.
 
 Reglas de NIT y CUI de Guatemala: [verificar con el contador / SAT] (docs/REVISION_CONTADOR.md).
 """

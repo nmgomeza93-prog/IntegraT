@@ -111,6 +111,8 @@ server <- function(input, output, session) {
   mod_margen_server("margen", s, ir_a)
   mod_reglas_venta_server("reglas_venta", s, ir_a)
   mod_clientes_server("clientes", s, ir_a)
+  mod_negocio_server("negocio", s, ir_a)
+  mod_informes_server("informes", s, ir_a)
   mod_importaciones_server("importaciones", s, ir_a)
   mod_mas_server("mas", salir, ir_a)
 }

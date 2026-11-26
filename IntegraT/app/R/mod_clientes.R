@@ -43,7 +43,8 @@ cuerpo_cliente <- function(valores, campos) {
   for (i in seq_along(campos)) {
     c <- campos[[i]]
     v <- valores$campos[[i]]
-    datos[[c$id]] <- if (identical(c$tipo, "si_no")) isTRUE(v) else vacio_a_null(v)
+    # `[<- list()`: con `[[<-` un NULL quitaría la clave y el dato borrado no llegaría a la API.
+    datos[c$id] <- list(if (identical(c$tipo, "si_no")) isTRUE(v) else vacio_a_null(v))
   }
   list(
     nombre = trimws(valores$nombre %||% ""),

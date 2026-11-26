@@ -485,3 +485,10 @@
 /* C2: clientes */
 .clientes { display: flex; flex-direction: column; gap: var(--esp-3); }
 .clientes .boton-primario, .clientes .boton-secundario { width: 100%; }
+
+/* Mi negocio */
+.mi-negocio { display: flex; flex-direction: column; gap: var(--esp-3); }
+.mi-negocio .boton-primario { width: 100%; }
+
+/* Informe del mes */
+.informes { display: flex; flex-direction: column; gap: var(--esp-3); }

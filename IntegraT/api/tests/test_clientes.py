@@ -5,7 +5,7 @@ import pytest
 import sqlalchemy as sa
 from conftest import con_token, crear_negocio_api, registrar_usuario
 
-from integrat.clientes import validaciones as val
+from integrat import validaciones as val
 
 
 @pytest.fixture

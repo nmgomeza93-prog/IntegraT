@@ -6,12 +6,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from sqlalchemy.engine import Engine
 
+from integrat import validaciones as val
 from integrat.auth import seguridad
 from integrat.auth.dependencias import AccesoNegocio, UsuarioActual, acceso_negocio, usuario_actual
 from integrat.dependencias import obtener_engine
 from integrat.negocios import servicio
 from integrat.negocios.esquemas import (
     AccesoOut,
+    DatosNegocioIn,
     ImpuestosIn,
     NegocioCreadoOut,
     NegocioIn,
@@ -94,6 +96,26 @@ def fijar_precios(negocio_id: uuid.UUID, datos: PreciosIn,
         raise HTTPException(status.HTTP_403_FORBIDDEN, "No tienes permiso para cambiar esto.")
     with engine.begin() as con:
         servicio.fijar_precios(con, acceso.contexto, datos)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put("/negocios/{negocio_id}/datos", status_code=status.HTTP_204_NO_CONTENT,
+            summary="Mi negocio: nombre, contacto y datos para facturar")
+def fijar_datos(negocio_id: uuid.UUID, datos: DatosNegocioIn,
+                acceso: Annotated[AccesoNegocio, Depends(acceso_negocio)],
+                engine: Motor) -> Response:
+    if negocio_id != acceso.contexto.negocio_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No encontramos ese negocio.")
+    if acceso.rol not in {"dueno", "administrador"}:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No tienes permiso para cambiar esto.")
+    if acceso.rol != "dueno" and datos.model_fields_set & {"nit", "nombre_fiscal"}:
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            "Solo el dueño puede cambiar el NIT y el nombre para facturar.")
+    try:
+        with engine.begin() as con:
+            servicio.fijar_datos(con, acceso.contexto, datos)
+    except val.DatoInvalido as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from None
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

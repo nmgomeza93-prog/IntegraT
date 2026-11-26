@@ -37,7 +37,7 @@
 
   // --- Navegación inferior: marca la sección activa ---
   // Secciones que no tienen botón propio en la barra se muestran bajo otra (Gastos vive en "Más").
-  var BAJO_BOTON = { gastos: "mas", inventario: "mas", compras: "mas", impuestos: "mas", caja: "mas", dueno: "mas", margen: "mas", importaciones: "mas", reglas_venta: "mas", clientes: "mas" };
+  var BAJO_BOTON = { gastos: "mas", inventario: "mas", compras: "mas", impuestos: "mas", caja: "mas", dueno: "mas", margen: "mas", importaciones: "mas", reglas_venta: "mas", clientes: "mas", negocio: "mas", informes: "mas" };
   function marcarSeccion(destino) {
     destino = BAJO_BOTON[destino] || destino;
     document.querySelectorAll(".nav-inferior__boton[data-destino]").forEach(function (b) {
@@ -127,5 +127,10 @@
     Shiny.addCustomMessageHandler("ir_a_seccion", function (destino) { marcarSeccion(destino); });
     // Al cambiar de pantalla (registro, onboarding, app) se vuelve arriba
     Shiny.addCustomMessageHandler("subir", function (_) { window.scrollTo(0, 0); });
+    // Mi negocio: el nombre nuevo en el encabezado, sin redibujar la app.
+    Shiny.addCustomMessageHandler("nombre_negocio", function (nombre) {
+      var el = document.querySelector(".app-encabezado__negocio");
+      if (el) el.textContent = nombre;
+    });
   });
 })();

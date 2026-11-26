@@ -29,6 +29,10 @@ test_that("el formulario manda null en lo vacío y no manda NIT a un Consumidor 
   expect_null(cuerpo$telefono)
   expect_null(cuerpo$id_fiscal)
   expect_equal(cuerpo$datos, list(c1 = "@maria", c2 = TRUE))
+  # Vaciar un campo propio manda null (para borrarlo en la API), no lo omite.
+  vaciado <- cuerpo_cliente(list(nombre = "Ana", campos = list("", FALSE)), campos)
+  expect_match(jsonlite::toJSON(vaciado, auto_unbox = TRUE, null = "null"), '"c1":null',
+               fixed = TRUE)
   json <- jsonlite::toJSON(cuerpo, auto_unbox = TRUE, null = "null")
   expect_match(json, '"telefono":null')
   # Sin campos propios, los datos van como {} (la API espera un objeto, no una lista).

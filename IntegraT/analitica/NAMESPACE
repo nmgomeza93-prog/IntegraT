@@ -1,3 +1,5 @@
 # Generado a mano en el paso 1; se mantendrá con roxygen2 cuando haya funciones.
 export(version_analitica)
 export(meta_del_mes)
+export(ticket_promedio)
+export(proporcion_de)
