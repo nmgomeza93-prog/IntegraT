@@ -1,11 +1,12 @@
-# MySQL local SOLO para pruebas automáticas (paso 2 de la Fase 1).
+# MySQL local SOLO para pruebas automáticas (pytest y CI).
+# Para desarrollar con Docker (MySQL + API + app) usa ../compose.yaml.
 # Uso (desde la raíz del proyecto):
 #   docker compose -f infra/docker-compose.yml --env-file .env up -d mysql-test
 # Las credenciales salen de .env (TEST_DB_*). Los datos viven en memoria (tmpfs): se pierden al apagar.
 name: integrat
 services:
   mysql-test:
-    image: mysql:9
+    image: mysql:8.4   # misma versión que Azure Flexible Server (D-24)
     container_name: integrat-mysql-test
     environment:
       MYSQL_DATABASE: ${TEST_DB_NAME:?Falta TEST_DB_NAME en .env}
@@ -25,21 +26,3 @@ services:
       interval: 3s
       timeout: 3s
       retries: 40
-
-  # API en contenedor (opcional en desarrollo; así correrá en el servidor y en Azure).
-  #   docker compose -f infra/docker-compose.yml --env-file .env --profile api up -d --build api
-  api:
-    profiles: ["api"]
-    build:
-      context: ..
-      dockerfile: api/Dockerfile
-    image: integrat-api:dev
-    container_name: integrat-api
-    env_file: ../.env
-    ports:
-      - "127.0.0.1:8000:8000"
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/salud', timeout=5)"]
-      interval: 15s
-      timeout: 10s
-      retries: 3

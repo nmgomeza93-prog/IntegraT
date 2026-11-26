@@ -168,6 +168,11 @@ Por el último punto, **se recomienda mantener R-01**: todo pasa por la API, que
 
 ## 7. Preparado para Azure
 
+> **Implementado (D-24):** imágenes `api/Dockerfile` y `app/Dockerfile` (etapas `dev` y `prod`),
+> desarrollo local con `compose.yaml` y receta de Azure en `infra/azure/README.md`
+> (`crear.sh` una vez, `publicar.sh` en cada versión). La tabla de abajo es la propuesta original;
+> donde difiera, manda `infra/azure/README.md`.
+
 Todo se construye como **contenedores configurados solo por variables de entorno**, siguiendo los principios *twelve-factor*.
 
 | Pieza | Piloto | Azure (propuesta) |

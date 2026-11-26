@@ -45,3 +45,34 @@ Rscript -e "renv::restore()"
 Rscript -e "shiny::runApp('app')"
 Rscript -e "testthat::test_dir('app/tests/testthat')"
 ```
+
+## Con Docker (todo junto, sin instalar R ni Python)
+
+Solo necesitas Docker Desktop. Levanta MySQL local, migraciones, API y app con recarga automática:
+
+```bash
+# 1. En tu .env, agrega (valores tuyos, solo para tu PC; ver .env.example):
+#    LOCAL_DB_PASSWORD=...   LOCAL_DB_ROOT_PASSWORD=...   API_JWT_SECRET=...
+# 2. Desde la raíz IntegraT/:
+docker compose up --build      # la primera vez tarda (descarga R y los paquetes)
+```
+
+- App: <http://localhost:3838> · API: <http://localhost:8000/docs>
+- Guardas un archivo de `api/src` → la API se reinicia sola. Guardas uno de `app/` → Shiny recarga
+  la página. Cambios en `analitica/R` o en dependencias: `docker compose restart app` /
+  `docker compose up --build`.
+- Cada arranque corre las migraciones y los catálogos (`api/migrar.sh`) antes de la API.
+- `docker compose down` apaga y **conserva** los datos; `docker compose down -v` los borra.
+- Los contenedores nunca reciben la base real: usan su propio MySQL 8.4 (la misma versión que Azure).
+- Otro puerto o abrirla desde el celular: `API_PUERTO`, `APP_PUERTO`, `APP_IP=0.0.0.0` en `.env`.
+
+## Despliegue en Azure
+
+Container Apps (app pública + API interna), MySQL Flexible Server y Key Vault.
+Receta completa: [`infra/azure/README.md`](infra/azure/README.md).
+
+```bash
+export SUFIJO=gt01
+bash infra/azure/crear.sh      # una vez: crea la infraestructura
+bash infra/azure/publicar.sh   # cada versión: imágenes, migraciones, API y app
+```

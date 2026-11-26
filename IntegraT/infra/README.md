@@ -1,9 +1,9 @@
 # infra
 
-Aquí vivirán, según los pasos de `docs/PLAN_FASE1.md`:
+- `docker-compose.yml`: MySQL en memoria para las pruebas automáticas (pytest y CI).
+- `docker/paquetes_app.R`: instala en la imagen de la app solo los paquetes de R que usa (versiones de `renv.lock`).
+- `azure/`: receta de despliegue en Azure (`crear.sh`, `publicar.sh`, `README.md`).
+- `desplegar_app.R` y `railway.md`: histórico (shinyapps.io y Railway, reemplazados por D-24).
 
-- `docker-compose.yml`: MySQL local para pruebas (paso 2) y la API (paso 3).
-- `Dockerfile` de la app Shiny (portabilidad hacia Azure, `docs/CONFIGURACION_SERVIDOR.md` §7).
-- `cors-r2.json`: política CORS de los buckets R2.
-
-Nunca se guardan secretos aquí: todo sale de `../.env`.
+El desarrollo local con Docker vive en `../compose.yaml`. Las imágenes: `../api/Dockerfile` y `../app/Dockerfile`.
+Nunca se guardan secretos aquí: en local salen de `../.env`; en Azure, de Key Vault.

@@ -55,7 +55,7 @@ jobs:
 
       - name: Levantar MySQL de pruebas (el mismo servicio que usas en local)
         run: |
-          touch .env   # vacío: el servicio `api` del compose lo referencia, pero no se levanta aquí
+          touch .env   # vacío: las credenciales de prueba vienen de env: (arriba)
           docker compose -f infra/docker-compose.yml up -d --wait mysql-test
 
       - name: Instalar dependencias
@@ -108,3 +108,28 @@ jobs:
 
       - name: Pruebas del paquete de analítica
         run: Rscript -e "testthat::test_local('analitica', stop_on_failure = TRUE)"
+
+  imagenes:
+    name: Imágenes Docker (se construyen, no se publican)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: API (prod)
+        uses: docker/build-push-action@v6
+        with:
+          context: IntegraT
+          file: IntegraT/api/Dockerfile
+          target: prod
+          push: false
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+      - name: App Shiny (prod)
+        uses: docker/build-push-action@v6
+        with:
+          context: IntegraT
+          file: IntegraT/app/Dockerfile
+          target: prod
+          push: false
+          cache-from: type=gha,scope=app
+          cache-to: type=gha,mode=max,scope=app

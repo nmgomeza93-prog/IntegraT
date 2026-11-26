@@ -1,0 +1,104 @@
+# IntegraT en tu PC con Docker: MySQL local + migraciones + API + app Shiny, con recarga automática.
+#
+#   docker compose up --build        # la primera vez (o tras cambiar dependencias)
+#   docker compose up                # las siguientes
+#   docker compose down              # apaga (los datos de MySQL se conservan)
+#   docker compose down -v           # apaga y BORRA los datos locales
+#
+# App: http://localhost:3838   API: http://localhost:8000/docs
+#
+# Seguridad: los contenedores NO reciben tu .env completo. Compose solo toma de .env los valores
+# que aquí se nombran (LOCAL_DB_*, API_JWT_SECRET): la base real (DB_*) nunca llega a Docker.
+# Las pruebas automáticas siguen usando infra/docker-compose.yml (MySQL en memoria).
+name: integrat-dev
+
+x-bd-local: &bd-local
+  APP_ENV: dev
+  DB_HOST: mysql
+  DB_PORT: "3306"
+  DB_NAME: integrat
+  DB_USER: integrat_local
+  DB_PASSWORD: ${LOCAL_DB_PASSWORD:?Falta LOCAL_DB_PASSWORD en .env (ver .env.example)}
+  DB_SSLMODE: disabled
+
+services:
+  mysql:
+    # 8.4 LTS: la versión más nueva que ofrece Azure Database for MySQL Flexible Server
+    # (misma versión en tu PC y en Azure).
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: integrat
+      MYSQL_USER: integrat_local
+      MYSQL_PASSWORD: ${LOCAL_DB_PASSWORD:?Falta LOCAL_DB_PASSWORD en .env (ver .env.example)}
+      MYSQL_ROOT_PASSWORD: ${LOCAL_DB_ROOT_PASSWORD:?Falta LOCAL_DB_ROOT_PASSWORD en .env (ver .env.example)}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+00:00
+    ports:
+      - "127.0.0.1:${LOCAL_DB_PORT:-3308}:3306"   # para abrirla con DBeaver/Workbench si quieres
+    volumes:
+      - mysql-datos:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 3s
+      timeout: 3s
+      retries: 60
+
+  # Corre una vez en cada arranque: migraciones (alembic) y catálogos (semillas). Ambos idempotentes.
+  migrar:
+    build: &build-api
+      context: .
+      dockerfile: api/Dockerfile
+      target: dev
+    image: integrat-api:dev
+    environment: *bd-local
+    command: ["sh", "migrar.sh"]
+    volumes: &codigo-api
+      - ./api/src:/app/api/src
+      - ./api/migrations:/app/api/migrations
+      - ./db:/app/db:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: *build-api
+    image: integrat-api:dev
+    environment:
+      <<: *bd-local
+      API_JWT_SECRET: ${API_JWT_SECRET:?Falta API_JWT_SECRET en .env}
+    volumes: *codigo-api
+    ports:
+      - "127.0.0.1:${API_PUERTO:-8000}:8000"
+    depends_on:
+      migrar:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/salud', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  app:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+      target: dev
+    image: integrat-app:dev
+    environment:
+      API_BASE_URL: http://api:8000   # red interna de Docker
+    volumes:
+      - ./app:/srv/integrat/app
+      - ./analitica/R:/srv/integrat/analitica/R:ro
+    ports:
+      # APP_IP=0.0.0.0 en .env para abrirla desde el celular en la misma Wi-Fi.
+      - "${APP_IP:-127.0.0.1}:${APP_PUERTO:-3838}:3838"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  mysql-datos:

@@ -1,13 +1,37 @@
+# Contexto de construcción de las imágenes (raíz IntegraT/). Nada secreto ni pesado entra aquí.
+
+# Secretos: nunca
 .env
 .env.*
 !.env.example
+**/.Renviron
+**/*.pem
+**/*.key
+
+# Python
 **/.venv
 **/__pycache__
 **/.pytest_cache
 **/.ruff_cache
+
+# R
 renv/library
+renv/staging
+renv/local
 .Rproj.user
-.git
+**/.RData
+**/.Rhistory
+*.Rproj
+
+# Pruebas y documentación (no van a las imágenes)
+app/tests
+analitica/tests
 docs
-app
-analitica
+*.md
+!api/README.md
+
+# Otros
+.git
+.claude
+**/*.xlsx
+**/~$*

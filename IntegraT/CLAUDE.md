@@ -23,7 +23,7 @@ Antes de trabajar, lee `docs/DECISIONES.md` y el documento de `docs/` que corres
    - No leas ni muestres el contenido de `.env`.
    - `.env` está en `.gitignore`; `.env.example` lista solo los nombres, sin valores.
    - Los logs registran configuración enmascarada.
-3. **Base de datos: solo `integrat`** (MySQL 9.x, decisión D-19; hoy en Railway, el piloto irá a Azure por D-23).
+3. **Base de datos: solo `integrat`** (MySQL; 8.4 en Azure y en Docker por D-24).
    El usuario de `.env` tiene privilegios globales en ese servidor (D-20, riesgo aceptado). Por eso:
    - Toda conexión debe abrir **solo** la base `integrat`.
    - Nunca se ejecutan sentencias contra otras bases (por ejemplo `cam_talent_hub_gestion_cl0` o `erp_pyme_gt`).
@@ -92,8 +92,9 @@ Antes de trabajar, lee `docs/DECISIONES.md` y el documento de `docs/` que corres
 
 ## Hospedaje (`docs/CONFIGURACION_SERVIDOR.md`)
 
-- Piloto (**D-23**, reemplaza a D-21): la API en **Azure Container Apps** y MySQL en **Azure Database for MySQL Flexible Server**, con secretos en **Key Vault**; Shiny sigue en **shinyapps.io**. Railway deja de usarse (`infra/railway.md` queda como histórico; falta la receta de Azure).
-  La API en ejecución usa el usuario `integrat_api` (solo DML sobre `integrat`); las migraciones, `integrat_owner`. La API se endurece antes de abrirla (límite de intentos, `Idempotency-Key`, sin `/docs` fuera de `dev`).
+- Piloto (**D-23** y **D-24**): API y app Shiny en **Azure Container Apps** (East US 2; la app pública con afinidad de sesión, la API solo en la red interna), MySQL **8.4** en **Azure Database for MySQL Flexible Server** y secretos en **Key Vault** con identidad administrada. Receta: `infra/azure/README.md` (`crear.sh` una vez, `publicar.sh` por versión: imágenes construidas en Azure, Job de migraciones, API, app). Railway y shinyapps.io quedan como histórico.
+  La API en ejecución usa el usuario `integrat_api` (solo DML sobre `integrat`); las migraciones, `integrat_owner` (Job `integrat-migrar` con `api/migrar.sh`). La API se endurece antes de abrirla (límite de intentos, `Idempotency-Key`, sin `/docs` fuera de `dev`).
+  Las migraciones corren antes que el código nuevo: deben ser compatibles con la versión anterior.
 - Fotos públicas por `r2.dev` en el piloto (dominio propio en producción). La BD guarda llaves, no URLs.
 - Todo en contenedores y configurado por variables de entorno, listo para migrar a Azure (Container Apps + Azure Database for MySQL Flexible Server + Key Vault).
 
@@ -122,8 +123,9 @@ Rscript -e "testthat::test_dir('app/tests/testthat')"
 Rscript -e "testthat::test_local('analitica')"
 ```
 
-API en contenedor (desde la raíz `IntegraT/`): `docker compose -f infra/docker-compose.yml --env-file .env --profile api up -d --build api`.
-La imagen nunca incluye `.env` (está en `.dockerignore`); recibe la configuración por variables de entorno.
+Docker (desde la raíz `IntegraT/`): `docker compose up --build` levanta MySQL 8.4 local (volumen persistente), las migraciones (`api/migrar.sh`), la API y la app con recarga automática (`compose.yaml`; app en :3838, API en :8000). Compose solo toma de `.env` `LOCAL_DB_*` y `API_JWT_SECRET`: la base real nunca llega a los contenedores.
+Imágenes: `api/Dockerfile` y `app/Dockerfile`, con etapas `dev` y `prod` (la de producción es la última). La de la app instala solo los paquetes de `infra/docker/paquetes_app.R` (`RAICES`): si la app empieza a usar un paquete nuevo, agrégalo ahí. Las imágenes nunca incluyen `.env` (`.dockerignore`); el CI las construye en cada push.
+En Git Bash, `docker run -v`/`--tmpfs` con rutas `/...` necesitan `MSYS_NO_PATHCONV=1`.
 
 Logs: `integrat/logs.py` enmascara secretos. Los errores de la BD se registran solo por su tipo, nunca con el mensaje del driver (incluye usuario y host).
 
@@ -145,6 +147,9 @@ App Shiny (`app/`):
 - Importaciones (`docs/PLAN_IMPORTACION.md`): `mod_importaciones.R` sube la plantilla de factura (la de la v1: hoja `Factura_camino`, filas ENCABEZADO + PRODUCTO) con `sesion_subir()` (multipart) a `/v1/importaciones/vista-previa`; la API (`integrat/importaciones/`) la lee, sugiere nombre, categoría y variantes, convierte con el cobro de la tarjeta en Q, reparte cargos y courier por valor, crea productos y variantes como mercadería al recibir y les pone su precio sugerido.
 - Existencia al vender (`docs/ANALISIS_INVENTARIO_Y_CLIENTES.md`): la regla del negocio (`vender_sin_existencia`: tiendas `bloquear`, restaurantes `avisar`; Más → "Si no hay inventario", `mod_reglas_venta.R`) la aplica la API al cobrar (`integrat/existencias.py`, 409 si no alcanza). En tiendas todo producto nace como mercadería en 0. Vender muestra "Quedan N"/"Agotado"/"Sin inventario" y topa el carrito con `disponible` de cada ítem y variante. Alertas (V2): mínimo por defecto del negocio (`minimo_defecto`), `alerta_existencia` en ítems y variantes, `GET /v1/inventario/alertas` para la tarjeta "Por agotarse" del Inicio y `por_agotarse` en la venta.
 - Clientes: `mod_clientes.R` (Más → Clientes) y "¿A quién le vendes?" al cobrar en `mod_vender.R`. En la API, `integrat/clientes/` con `/v1/clientes` (búsqueda, ficha con compras, duplicados por teléfono o NIT/CUI con `aunque_se_repita`) y `/v1/clientes/campos` (campos propios del negocio); las validaciones viven en `validaciones.py` (NIT y CUI [verificar]). La venta acepta `cliente_id` (nulo = Consumidor final) y devuelve `cliente_nombre`.
+- Mi negocio (`mod_negocio.R`, Más → Mi negocio): nombre, teléfono, correo y dirección (dueño o administrador) y NIT y nombre fiscal del titular (solo el dueño) con `PUT /v1/negocios/{id}/datos`; el nombre nuevo se pone en el encabezado por JS (`nombre_negocio`), sin redibujar la app. Las validaciones de contacto y fiscales viven en `api/src/integrat/validaciones.py` (las usan clientes y negocio).
+- Informe del mes (`mod_informes.R`, Más → Informe del mes): `GET /v1/informes/mes` (`integrat/informes/`: total, lo más vendido, quién compró, cómo pagaron; solo sumas y conteos) más `/v1/resultados`; el ticket promedio y las proporciones son de `integrat.analitica` (`analitica/R/informe.R`).
+- En R, para mandar un `null` a la API usa `x["campo"] <- list(NULL)` (o `list(campo = NULL)` al construir): `x$campo <- NULL` y `x[["campo"]] <- NULL` QUITAN el campo y el dato no se borra.
 - **Pantallas al día (sincronización):** `sesion_llamar()` sube `s$datos_v` con cada cambio guardado (método distinto de GET y respuesta correcta). Al entrar a una sección, `app.R` copia ese valor a `s$al_dia`. **Todo `reactive` que pida datos a la API debe leer `s$al_dia`**, así cada pantalla se pone al día al abrirla. Shiny solo recarga la sección visible, y la pantalla en uso no se redibuja (no se borra lo que se escribe).
 - Errores de validación de la API: `integrat/errores.py` traduce los 422 de FastAPI a un texto que dice qué dato revisar ("Revisa el nombre: escribe al menos 2 letras."). Nombres nuevos de campos van en `CAMPOS`. Una lista vacía de R viaja como `[]`: si la API espera un objeto, manda `stats::setNames(list(), character())`.
 - `sesion.R`: el token vive solo en la memoria del servidor de Shiny (nunca en el navegador). `sesion_llamar()` renueva el token vencido una vez. `api_cliente.R` (`api_llamar()`) nunca lanza error y traduce los fallos a mensajes amables.
